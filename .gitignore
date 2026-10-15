@@ -399,3 +399,12 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Relliga local libraries and private exports
+*.db
+*.db-shm
+*.db-wal
+*.db.lock
+*.sqlite*
+private-data/
+.avalonia-build-tasks/

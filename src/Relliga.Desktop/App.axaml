@@ -1,0 +1,17 @@
+<Application xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Relliga.Desktop.App" RequestedThemeVariant="Dark">
+  <Application.Styles>
+    <FluentTheme />
+    <Style Selector="Window"><Setter Property="FontFamily" Value="Inter" /><Setter Property="FontSize" Value="14" /></Style>
+    <Style Selector="TextBlock"><Setter Property="Foreground" Value="#F0F2F7" /></Style>
+    <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="#A6B0C3" /></Style>
+    <Style Selector="TextBlock.eyebrow"><Setter Property="Foreground" Value="#A7C5FF" /><Setter Property="FontSize" Value="11" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="LetterSpacing" Value="2" /><Setter Property="TextWrapping" Value="Wrap" /></Style>
+    <Style Selector="TextBlock.heading"><Setter Property="FontSize" Value="30" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
+    <Style Selector="Border.card"><Setter Property="Background" Value="#171F2D" /><Setter Property="BorderBrush" Value="#2A3549" /><Setter Property="BorderThickness" Value="1" /><Setter Property="CornerRadius" Value="14" /><Setter Property="Padding" Value="24" /></Style>
+    <Style Selector="Button"><Setter Property="CornerRadius" Value="8" /><Setter Property="Padding" Value="16,11" /><Setter Property="MinHeight" Value="42" /></Style>
+    <Style Selector="Button.primary"><Setter Property="Background" Value="#A9C7FF" /><Setter Property="Foreground" Value="#101B2E" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
+    <Style Selector="TextBox"><Setter Property="CornerRadius" Value="8" /><Setter Property="MinHeight" Value="42" /></Style>
+    <Style Selector="ListBoxItem"><Setter Property="Padding" Value="12" /><Setter Property="CornerRadius" Value="8" /><Setter Property="Margin" Value="0,3" /></Style>
+    <Style Selector="Button:focus-visible"><Setter Property="BorderBrush" Value="#DCE9FF" /><Setter Property="BorderThickness" Value="2" /></Style>
+  </Application.Styles>
+</Application>

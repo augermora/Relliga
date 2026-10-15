@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup><ProjectReference Include="../Relliga.Domain/Relliga.Domain.csproj" /></ItemGroup>
+</Project>

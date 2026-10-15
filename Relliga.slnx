@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Relliga.Domain/Relliga.Domain.csproj" />
+    <Project Path="src/Relliga.Application/Relliga.Application.csproj" />
+    <Project Path="src/Relliga.Infrastructure/Relliga.Infrastructure.csproj" />
+    <Project Path="src/Relliga.Importers/Relliga.Importers.csproj" />
+    <Project Path="src/Relliga.Desktop/Relliga.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/"><Project Path="tests/Relliga.Tests/Relliga.Tests.csproj" /></Folder>
+</Solution>

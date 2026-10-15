@@ -1,0 +1,124 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:Relliga.Desktop" xmlns:d="using:Relliga.Domain"
+        x:Class="Relliga.Desktop.MainWindow" x:DataType="local:MainViewModel"
+        Title="Relliga — Your digital life, together." Width="1240" Height="820" MinWidth="900" MinHeight="650"
+        Background="#101622" WindowStartupLocation="CenterScreen">
+  <Grid ColumnDefinitions="210,*">
+    <Border Background="#0C111C" BorderBrush="#263045" BorderThickness="0,0,1,0" Padding="20,32,16,20">
+      <Grid RowDefinitions="Auto,Auto,*,Auto">
+        <StackPanel Spacing="9" Margin="8,0,0,36">
+          <Border Background="#A9C7FF" CornerRadius="12" Width="40" Height="40" HorizontalAlignment="Left">
+            <TextBlock Text="r" Foreground="#101B2E" FontSize="30" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-4,0,0" />
+          </Border>
+          <TextBlock Text="Relliga" FontSize="25" FontWeight="SemiBold" />
+          <TextBlock Text="Your digital life,&#10;together." Classes="muted" FontSize="12" LineHeight="19" />
+        </StackPanel>
+        <TextBlock Grid.Row="1" Text="YOUR LIBRARY" Classes="eyebrow" Margin="12,0,0,12" />
+        <ListBox Grid.Row="2" ItemsSource="{Binding Sections}" SelectedIndex="{Binding SelectedSection}" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Main navigation" />
+        <StackPanel Grid.Row="3" Margin="8,16,0,0" Spacing="7">
+          <TextBlock Text="●  Local &amp; private" Foreground="#9ADBC4" FontSize="12" />
+          <TextBlock Text="No accounts. No cloud." Classes="muted" FontSize="11" />
+          <TextBlock Text="v0.1.0 · GPLv3" Classes="muted" FontSize="11" />
+        </StackPanel>
+      </Grid>
+    </Border>
+    <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto" Margin="32,28,32,18">
+      <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,22">
+        <StackPanel Spacing="7"><TextBlock Text="PERSONAL DIGITAL ARCHIVE" Classes="eyebrow" /><TextBlock Text="{Binding PageTitle}" Classes="heading" /></StackPanel>
+        <Button Grid.Column="1" Content="Import personal data" Classes="primary" Command="{Binding ShowImportCommand}" VerticalAlignment="Center" />
+      </Grid>
+      <Border Grid.Row="1" Background="#38272E" BorderBrush="#B67787" BorderThickness="1" CornerRadius="10" Padding="16" Margin="0,0,0,16" IsVisible="{Binding HasError}">
+        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding Error}" TextWrapping="Wrap" Foreground="#FFDAE0" /><Button Grid.Column="1" Content="Dismiss" Command="{Binding DismissErrorCommand}" Margin="16,0,0,0" VerticalAlignment="Top" /></Grid>
+      </Border>
+      <Grid Grid.Row="2">
+        <ScrollViewer IsVisible="{Binding IsDashboard}" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Spacing="22">
+            <Border Classes="card" Background="#1A2940" Padding="30">
+              <StackPanel Spacing="14">
+                <TextBlock Text="A little more yours." FontSize="32" FontWeight="SemiBold" />
+                <TextBlock Text="Bring your digital history home. Preserve the things you listened to,&#10;find a forgotten favourite, and explore your story at your own pace." TextWrapping="Wrap" Classes="muted" LineHeight="24" />
+                <Button Content="Import Spotify history →" Command="{Binding ShowImportCommand}" HorizontalAlignment="Left" Classes="primary" Margin="0,8,0,0" />
+              </StackPanel>
+            </Border>
+            <Grid ColumnDefinitions="*,16,*,16,1.3*">
+              <Border Classes="card"><StackPanel Spacing="12"><TextBlock Text="IMPORTED EVENTS" Classes="eyebrow" /><TextBlock Text="{Binding EventCount}" FontSize="36" FontWeight="SemiBold" /><TextBlock Text="Moments preserved" Classes="muted" FontSize="12" /></StackPanel></Border>
+              <Border Grid.Column="2" Classes="card"><StackPanel Spacing="12"><TextBlock Text="SOURCES" Classes="eyebrow" /><TextBlock Text="{Binding SourceCount}" FontSize="36" FontWeight="SemiBold" /><TextBlock Text="Connected through exports" Classes="muted" FontSize="12" TextWrapping="Wrap" /></StackPanel></Border>
+              <Border Grid.Column="4" Classes="card"><StackPanel Spacing="16"><TextBlock Text="LATEST IMPORT" Classes="eyebrow" /><TextBlock Text="{Binding LatestImport}" FontSize="16" TextWrapping="Wrap" LineHeight="26" /></StackPanel></Border>
+            </Grid>
+            <Border Classes="card"><Grid ColumnDefinitions="*,Auto"><StackPanel Spacing="12"><TextBlock Text="Your sources" FontSize="18" FontWeight="SemiBold" /><TextBlock Text="{Binding Sources}" Classes="muted" TextWrapping="Wrap" /><TextBlock Text="Start with Spotify. More of your digital life will follow." Classes="muted" FontSize="12" TextWrapping="Wrap" /></StackPanel><Button Grid.Column="1" Content="Explore timeline →" Command="{Binding ShowTimelineCommand}" VerticalAlignment="Center" Margin="16,0,0,0" /></Grid></Border>
+          </StackPanel>
+        </ScrollViewer>
+
+        <ScrollViewer IsVisible="{Binding IsImport}" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Spacing="20">
+            <TextBlock Text="Your history has a home here." FontSize="24" FontWeight="SemiBold" />
+            <TextBlock Text="Select Spotify Extended Streaming History from your data export. Files are read locally; nothing is uploaded." Classes="muted" TextWrapping="Wrap" LineHeight="23" />
+            <Border Classes="card" Padding="28">
+              <StackPanel Spacing="18">
+                <TextBlock Text="01  CHOOSE AN EXPORT" Classes="eyebrow" />
+                <TextBlock Text="Spotify listening history" FontSize="21" FontWeight="SemiBold" />
+                <TextBlock Text="JSON or ZIP · Content-based detection · Safe to reimport" Classes="muted" TextWrapping="Wrap" />
+                <Button Content="Choose file…" Command="{Binding PickFileCommand}" HorizontalAlignment="Left" />
+                <TextBlock Text="{Binding SelectedFile}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Preview}" Classes="muted" TextWrapping="Wrap" LineHeight="24" />
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                  <Button Content="Import into library" Classes="primary" Command="{Binding ImportCommand}" />
+                  <Button Content="Cancel operation" Command="{Binding CancelCommand}" IsVisible="{Binding IsCancellable}" />
+                </StackPanel>
+                <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="3" />
+              </StackPanel>
+            </Border>
+            <Border Classes="card"><StackPanel Spacing="14"><TextBlock Text="02  IMPORT RESULT" Classes="eyebrow" /><TextBlock Text="{Binding ImportResult}" TextWrapping="Wrap" LineHeight="24" /><Button Content="View timeline →" Command="{Binding ShowTimelineCommand}" HorizontalAlignment="Left" /></StackPanel></Border>
+            <StackPanel Spacing="10"><TextBlock Text="Recent operations" FontSize="18" FontWeight="SemiBold" />
+              <ListBox ItemsSource="{Binding RecentImports}" SelectedItem="{Binding SelectedImport}" MaxHeight="180" AutomationProperties.Name="Import history">
+                <ListBox.ItemTemplate><DataTemplate x:DataType="local:ImportItem"><TextBlock Text="{Binding Label}" TextWrapping="Wrap" FontSize="12" /></DataTemplate></ListBox.ItemTemplate>
+              </ListBox>
+              <TextBlock Text="{Binding SelectedImport.Message}" TextWrapping="Wrap" Classes="muted" LineHeight="22" />
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+
+        <Grid IsVisible="{Binding IsExplorer}" RowDefinitions="Auto,Auto,*,Auto">
+          <StackPanel Spacing="12" Margin="0,0,0,16">
+            <TextBlock Text="A listening history, one moment at a time." Classes="muted" IsVisible="{Binding IsTimeline}" />
+            <TextBox Text="{Binding SearchText}" PlaceholderText="Search tracks, artists, albums…" IsVisible="{Binding IsSearch}" AutomationProperties.Name="Search text" MaxLength="500">
+              <TextBox.KeyBindings><KeyBinding Gesture="Enter" Command="{Binding FilterCommand}" /></TextBox.KeyBindings>
+            </TextBox>
+            <Grid ColumnDefinitions="*,12,*,12,Auto,8,Auto">
+              <StackPanel Spacing="6"><TextBlock Text="From · UTC" Classes="muted" FontSize="12" /><TextBox Text="{Binding FromDate}" PlaceholderText="YYYY-MM-DD" AutomationProperties.Name="From date" /></StackPanel>
+              <StackPanel Grid.Column="2" Spacing="6"><TextBlock Text="Through · UTC" Classes="muted" FontSize="12" /><TextBox Text="{Binding ToDate}" PlaceholderText="YYYY-MM-DD" AutomationProperties.Name="Through date" /></StackPanel>
+              <Button Grid.Column="4" Content="Apply" Command="{Binding FilterCommand}" Classes="primary" VerticalAlignment="Bottom" />
+              <Button Grid.Column="6" Content="Clear" Command="{Binding ClearFiltersCommand}" VerticalAlignment="Bottom" />
+            </Grid>
+          </StackPanel>
+          <ProgressBar Grid.Row="1" IsIndeterminate="True" IsVisible="{Binding IsQuerying}" Height="3" Margin="0,0,0,8" />
+          <Grid Grid.Row="2" ColumnDefinitions="1.4*,16,*">
+            <Grid>
+              <ListBox ItemsSource="{Binding Events}" SelectedItem="{Binding SelectedEvent}" Background="#141D2B" BorderThickness="0" IsVisible="{Binding HasEvents}" AutomationProperties.Name="Listening events">
+                <ListBox.ItemTemplate><DataTemplate x:DataType="local:EventItem">
+                  <StackPanel Spacing="7" Margin="0,4"><TextBlock Text="{Binding DateLabel}" Foreground="#A7C5FF" FontSize="11" /><TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="16" TextTrimming="CharacterEllipsis" /><TextBlock Text="{Binding Artist}" Classes="muted" TextTrimming="CharacterEllipsis" /><TextBlock Text="{Binding PlaybackLabel}" Classes="muted" FontSize="11" /></StackPanel>
+                </DataTemplate></ListBox.ItemTemplate>
+              </ListBox>
+              <Border Classes="card" IsVisible="{Binding HasNoEvents}" VerticalAlignment="Top"><StackPanel Spacing="14"><TextBlock Text="Room for your story" FontSize="20" FontWeight="SemiBold" /><TextBlock Text="{Binding EmptyMessage}" Classes="muted" TextWrapping="Wrap" LineHeight="23" /><Button Content="Import history" Command="{Binding ShowImportCommand}" HorizontalAlignment="Left" /></StackPanel></Border>
+            </Grid>
+            <Border Grid.Column="2" Classes="card" Padding="20">
+              <Grid RowDefinitions="Auto,*"><TextBlock Text="EVENT DETAILS" Classes="eyebrow" Margin="0,0,0,18" />
+                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled"><SelectableTextBlock Text="{Binding SelectedDetails}" TextWrapping="Wrap" FontSize="12" LineHeight="22" /></ScrollViewer>
+              </Grid>
+            </Border>
+          </Grid>
+          <Grid Grid.Row="3" ColumnDefinitions="*,Auto,8,Auto" Margin="0,16,0,0"><TextBlock Text="{Binding PageLabel}" Classes="muted" VerticalAlignment="Center" /><Button Grid.Column="1" Content="← Previous" Command="{Binding PreviousCommand}" /><Button Grid.Column="3" Content="Next →" Command="{Binding NextCommand}" /></Grid>
+        </Grid>
+
+        <ScrollViewer IsVisible="{Binding IsAbout}" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Spacing="20">
+            <Border Classes="card"><StackPanel Spacing="16"><TextBlock Text="Relliga" FontSize="32" FontWeight="SemiBold" /><TextBlock Text="Your digital life, together." FontSize="18" Classes="muted" /><TextBlock Text="Version 0.1.0 · Open source · GNU GPLv3" /><TextBlock Text="Relliga helps you preserve, search, and explore personal data exports. This first release supports Spotify Extended Streaming History." Classes="muted" TextWrapping="Wrap" LineHeight="24" /></StackPanel></Border>
+            <Border Classes="card"><StackPanel Spacing="14"><TextBlock Text="Privacy by design" FontSize="20" FontWeight="SemiBold" /><TextBlock Text="Imported information remains on your device. Relliga has no accounts, telemetry, cloud storage, or external API calls during normal use." TextWrapping="Wrap" LineHeight="24" /><TextBlock Text="The library is not encrypted at rest. Export metadata can include your Spotify username and IP address. Protect your device and backups accordingly." Classes="muted" TextWrapping="Wrap" LineHeight="24" /><TextBlock Text="LOCAL LIBRARY" Classes="eyebrow" /><SelectableTextBlock Text="{Binding DatabaseLocation}" TextWrapping="Wrap" /></StackPanel></Border>
+            <Border Classes="card"><StackPanel Spacing="14"><TextBlock Text="Free software. Yours to improve." FontSize="20" FontWeight="SemiBold" /><TextBlock Text="Licensed under the GNU General Public License, version 3. You may use, study, share, and modify Relliga under its terms. Provided without warranty. See LICENSE in the source repository." Classes="muted" TextWrapping="Wrap" LineHeight="24" /></StackPanel></Border>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+      <Grid Grid.Row="3" ColumnDefinitions="*,Auto" Margin="0,18,0,0"><TextBlock Text="{Binding Status}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" /><Button Grid.Column="1" Content="Retry opening library" Command="{Binding InitializeCommand}" IsVisible="{Binding NeedsInitialization}" /></Grid>
+    </Grid>
+  </Grid>
+</Window>
