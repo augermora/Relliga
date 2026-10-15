@@ -1,0 +1,20 @@
+[
+  {
+    "ts": "2025-01-02T12:00:00Z",
+    "ms_played": 180000,
+    "master_metadata_track_name": "Synthetic Aurora",
+    "master_metadata_album_artist_name": "Synthetic Ensemble",
+    "master_metadata_album_album_name": "Synthetic Horizons",
+    "spotify_track_uri": "spotify:track:synthetic-aurora",
+    "platform": "synthetic-device"
+  },
+  {
+    "ts": "2025-01-04T12:00:00Z",
+    "ms_played": 95000,
+    "master_metadata_track_name": "Synthetic Nebula",
+    "master_metadata_album_artist_name": "Synthetic Ensemble",
+    "master_metadata_album_album_name": "Synthetic Horizons",
+    "spotify_track_uri": "spotify:track:synthetic-nebula",
+    "platform": "synthetic-device"
+  }
+]

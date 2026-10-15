@@ -11,43 +11,54 @@ namespace Relliga.Desktop;
 public partial class MainViewModel(IHistoryStore store, ImportService imports, IDataImporter importer, SqliteHistoryStore library) : ObservableObject
 {
     public Func<Task<string?>>? SelectFile { get; set; }
-    public string[] Sections { get; } = ["Overview", "Import data", "Timeline", "Search", "Settings & about"];
+    public string[] Sections { get; } = ["Overview", "Import data", "Timeline", "Search", "Import history", "Settings & about"];
+    public string[] SourceOptions { get; } = ["All sources", "Spotify", "Google Calendar"];
+    public string[] KindOptions { get; } = ["All event types", "Listening", "Podcast", "Calendar"];
     public ObservableCollection<EventItem> Events { get; } = [];
     public ObservableCollection<ImportItem> RecentImports { get; } = [];
     public string DatabaseLocation => library.DatabasePath;
-    public string Version => "0.1.0";
+    public string Version => "0.2.0";
     private CancellationTokenSource? workCancellation;
     private CancellationTokenSource? queryCancellation;
     private int page;
     private long total;
+    private int historyPage;
+    private long historyTotal;
+    private DateTime? suggestedCalendarDate;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsDashboard), nameof(IsImport), nameof(IsTimeline), nameof(IsSearch), nameof(IsAbout), nameof(IsExplorer), nameof(PageTitle))]
+    [NotifyPropertyChangedFor(nameof(IsDashboard), nameof(IsImport), nameof(IsTimeline), nameof(IsSearch), nameof(IsHistory), nameof(IsAbout), nameof(IsExplorer), nameof(PageTitle))]
     private int selectedSection;
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(PickFileCommand), nameof(ImportCommand), nameof(PreviousCommand), nameof(NextCommand), nameof(FilterCommand), nameof(ClearFiltersCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PickFileCommand), nameof(ImportCommand), nameof(PreviousCommand), nameof(NextCommand), nameof(FilterCommand), nameof(ClearFiltersCommand), nameof(PreviousHistoryCommand), nameof(NextHistoryCommand))]
     private bool isBusy;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(NeedsInitialization))]
-    [NotifyCanExecuteChangedFor(nameof(PickFileCommand), nameof(ImportCommand), nameof(FilterCommand), nameof(ClearFiltersCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PickFileCommand), nameof(ImportCommand), nameof(FilterCommand), nameof(ClearFiltersCommand), nameof(PreviousHistoryCommand), nameof(NextHistoryCommand))]
     private bool isReady;
     [ObservableProperty] private bool isQuerying;
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(CancelCommand))] private bool isCancellable;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasError))] private string? error;
     [ObservableProperty] private string status = "Opening your local library…";
     [ObservableProperty] private string selectedFile = "No file selected";
-    [ObservableProperty] private string preview = "Choose a JSON file or ZIP archive from your Spotify Extended Streaming History export.";
+    [ObservableProperty] private string preview = "Choose Spotify history JSON, a Calendar ICS file, or a ZIP containing either format.";
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(ImportCommand))] private string? importPath;
     [ObservableProperty] private string importResult = "Your import results and any warnings will appear here.";
     [ObservableProperty] private string eventCount = "0";
     [ObservableProperty] private string sourceCount = "0";
+    [ObservableProperty] private string successfulImportCount = "0";
+    [ObservableProperty] private string sourceStatistics = "Import a source to see its statistics.";
+    [ObservableProperty] private string historyPageLabel = "No import operations";
+    [ObservableProperty] private string sourceFilter = "All sources";
+    [ObservableProperty] private string kindFilter = "All event types";
+    [ObservableProperty] private string rangeNote = "Dates use UTC for timed events; date-only and floating events retain their exported calendar date.";
     [ObservableProperty] private string latestImport = "No imports yet";
     [ObservableProperty] private string sources = "No sources imported yet";
     [ObservableProperty] private string searchText = "";
     [ObservableProperty] private string fromDate = "";
     [ObservableProperty] private string toDate = "";
     [ObservableProperty] private string pageLabel = "No events";
-    [ObservableProperty] private string emptyMessage = "Your story starts with an import. Add your Spotify export to see it here.";
+    [ObservableProperty] private string emptyMessage = "Your story starts with an import. Add a Spotify or Calendar export to see it here.";
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasSelection), nameof(SelectedDetails))] private EventItem? selectedEvent;
     [ObservableProperty] private ImportItem? selectedImport;
 
@@ -55,17 +66,20 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
     public bool IsImport => SelectedSection == 1;
     public bool IsTimeline => SelectedSection == 2;
     public bool IsSearch => SelectedSection == 3;
-    public bool IsAbout => SelectedSection == 4;
+    public bool IsHistory => SelectedSection == 4;
+    public bool IsAbout => SelectedSection == 5;
     public bool IsExplorer => IsTimeline || IsSearch;
     public bool HasError => Error is not null;
     public bool HasSelection => SelectedEvent is not null;
-    public string SelectedDetails => SelectedEvent?.Details ?? "Select a listening event to inspect its metadata and provenance.";
+    public string SelectedDetails => SelectedEvent?.Details ?? "Select an event to inspect its details and source provenance.";
     public bool NeedsInitialization => !IsReady;
-    public string PageTitle => Sections[Math.Clamp(SelectedSection, 0, 4)];
+    public string PageTitle => Sections[Math.Clamp(SelectedSection, 0, Sections.Length - 1)];
     public bool CanWork => IsReady && !IsBusy;
     public bool CanImport => CanWork && ImportPath is not null;
     public bool CanPrevious => CanWork && page > 0;
     public bool CanNext => CanWork && (long)(page + 1) * 50 < total;
+    public bool CanPreviousHistory => CanWork && historyPage > 0;
+    public bool CanNextHistory => CanWork && (long)(historyPage + 1) * 20 < historyTotal;
 
     partial void OnSelectedSectionChanged(int value)
     {
@@ -110,7 +124,13 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
             SelectedFile = Path.GetFileName(path);
             Status = "Inspecting file contents…";
             var token = workCancellation.Token;
-            Preview = await Task.Run(async () =>
+            suggestedCalendarDate = null;
+            if (importer is IImportInspector inspector)
+            {
+                var inspection = await Task.Run(() => inspector.InspectAsync(path, token));
+                Preview = inspection.Summary; suggestedCalendarDate = inspection.SuggestedCalendarDate;
+            }
+            else Preview = await Task.Run(async () =>
             {
                 int valid = 0, warnings = 0;
                 DigitalEvent? first = null;
@@ -124,7 +144,7 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
                     $"First sampled item: {first?.Title ?? "Title not provided"}\nFull validation runs during import.";
             }, token);
             ImportPath = path;
-            Status = "Spotify export ready to import";
+            Status = "Export ready to import";
         }
         catch (OperationCanceledException) { Preview = "Inspection cancelled. Choose a file to try again."; Status = "Inspection cancelled"; }
         catch (Exception ex) { Preview = "This file could not be prepared for import."; Error = FriendlyError(ex); Status = "File inspection failed"; }
@@ -146,9 +166,15 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
         var progress = new Progress<ImportProgress>(p => Status = p.Message);
         try
         {
-            Status = "Importing Spotify history…";
-            var result = await Task.Run(() => imports.ImportAsync(ImportPath!, "Spotify", progress, workCancellation.Token));
+            Status = "Importing personal history…";
+            var result = await Task.Run(() => imports.ImportAsync(ImportPath!, importer.Provider, progress, workCancellation.Token));
             ImportResult = result.Summary;
+            if (suggestedCalendarDate is { } date)
+            {
+                var start = date.Date.AddDays(-7);
+                FromDate = start.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                ToDate = start.AddDays(89).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            }
             Status = "Import complete · Your library is up to date";
         }
         catch (OperationCanceledException) { ImportResult = "Import cancelled. No events from this operation were saved."; Status = "Import cancelled"; }
@@ -157,6 +183,7 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
         {
             IsCancellable = false;
             workCancellation.Dispose(); workCancellation = null;
+            historyPage = 0;
             try { await RefreshSummaryAsync(); }
             catch (Exception ex) { Error = "Could not refresh the library: " + ex.Message; }
             IsBusy = false;
@@ -174,7 +201,8 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
     [RelayCommand(CanExecute = nameof(CanWork), AllowConcurrentExecutions = true)]
     private async Task FilterAsync() { page = 0; await LoadPageAsync(); }
     [RelayCommand(CanExecute = nameof(CanWork))]
-    private async Task ClearFiltersAsync() { SearchText = FromDate = ToDate = ""; page = 0; await LoadPageAsync(); }
+    private async Task ClearFiltersAsync()
+    { SearchText = FromDate = ToDate = ""; SourceFilter = SourceOptions[0]; KindFilter = KindOptions[0]; page = 0; await LoadPageAsync(); }
     [RelayCommand(CanExecute = nameof(CanPrevious))]
     private async Task PreviousAsync() { page--; await LoadPageAsync(); }
     [RelayCommand(CanExecute = nameof(CanNext))]
@@ -192,7 +220,8 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
             var from = ParseDate(FromDate);
             var to = ParseDate(ToDate);
             if (from > to) throw new FormatException("The start date must be on or before the end date.");
-            var query = new EventQuery(IsSearch ? SearchText : null, from, to?.AddDays(1), page);
+            var query = new EventQuery(IsSearch ? SearchText : null, from, to?.AddDays(1), page,
+                Provider: SourceFilter == SourceOptions[0] ? null : SourceFilter, Kind: KindFilter == KindOptions[0] ? null : KindFilter);
             var result = await Task.Run(() => store.QueryAsync(query, cancellation.Token));
             if (cancellation.IsCancellationRequested) return;
             total = result.Total;
@@ -200,6 +229,9 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
             foreach (var item in result.Items) Events.Add(new(item));
             SelectedEvent = null;
             PageLabel = total == 0 ? "0 events" : $"{page * 50 + 1:N0}–{Math.Min((page + 1L) * 50, total):N0} of {total:N0} events";
+            RangeNote = result.WindowFrom is { } windowFrom && result.WindowUntil is { } windowUntil
+                ? $"Window: {windowFrom:yyyy-MM-dd} through {windowUntil.AddDays(-1):yyyy-MM-dd} · Calendar ranges are limited to 366 days."
+                : "UTC for timed events; all-day dates and floating wall-clock times are preserved. Calendar defaults to a bounded 90-day window.";
             EmptyMessage = "No events match these filters. Adjust your search or import more history.";
             OnPropertyChanged(nameof(HasEvents));
             OnPropertyChanged(nameof(HasNoEvents));
@@ -224,12 +256,35 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
         var summary = await Task.Run(() => store.GetSummaryAsync());
         EventCount = summary.Events.ToString("N0");
         SourceCount = summary.Sources.ToString();
-        Sources = summary.Sources == 0 ? "No sources imported yet" : "Spotify · Extended Streaming History";
+        SuccessfulImportCount = summary.SuccessfulImports.ToString("N0");
+        Sources = summary.Sources == 0 ? "No sources imported yet" : string.Join(" · ", summary.BySource!.Select(x => x.Provider));
+        SourceStatistics = string.Join("\n", (summary.BySource ?? []).Select(x => x.Provider == "Google Calendar"
+            ? $"Google Calendar · {x.Events:N0} events/series · {x.RecurringDefinitions:N0} recurring series"
+            : $"{x.Provider} · {x.Events:N0} playback events · {x.DurationMs / 3_600_000d:N1} hours played"));
+        if (summary.Sources == 0) SourceStatistics = "Import a source to see its statistics.";
+        historyTotal = summary.TotalImports;
         LatestImport = summary.LatestImport is { } last ? $"{last.Status}\n{last.StartedAt.ToLocalTime():dd MMM yyyy · HH:mm}" : "No imports yet";
-        var history = await Task.Run(() => store.GetImportsAsync());
+        await LoadHistoryAsync();
+    }
+
+    private async Task LoadHistoryAsync()
+    {
+        var history = await Task.Run(() => store.GetImportsAsync(page: historyPage));
         RecentImports.Clear();
         foreach (var item in history) RecentImports.Add(new(item));
         SelectedImport = RecentImports.FirstOrDefault();
+        HistoryPageLabel = historyTotal == 0 ? "No import operations" : $"{historyPage * 20 + 1:N0}–{Math.Min((historyPage + 1L) * 20, historyTotal):N0} of {historyTotal:N0} imports";
+        PreviousHistoryCommand.NotifyCanExecuteChanged(); NextHistoryCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanPreviousHistory))]
+    private async Task PreviousHistoryAsync() { historyPage--; await GuardHistoryAsync(); }
+    [RelayCommand(CanExecute = nameof(CanNextHistory))]
+    private async Task NextHistoryAsync() { historyPage++; await GuardHistoryAsync(); }
+    private async Task GuardHistoryAsync()
+    {
+        try { await LoadHistoryAsync(); }
+        catch (Exception ex) { Error = "Could not load import history: " + ex.Message; }
     }
 
     private static DateTimeOffset? ParseDate(string text)

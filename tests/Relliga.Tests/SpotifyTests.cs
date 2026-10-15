@@ -77,7 +77,7 @@ public sealed class SpotifyTests : IDisposable
     [Fact] public async Task PreservesFractionalUtcTimestamps()
     {
         var row = Assert.Single(await TestFiles.Read(files.Write("[" + TestFiles.Row(timestamp: "2025-01-01T12:00:00.1234567Z") + "]")));
-        Assert.Equal(1234567, row.Event!.EndedAt.Ticks % TimeSpan.TicksPerSecond);
+        Assert.Equal(1234567, row.Event!.EndedAt!.Value.Ticks % TimeSpan.TicksPerSecond);
     }
 
     [Theory] [InlineData("")] [InlineData("not json")] [InlineData("{}")] [InlineData("[{")]

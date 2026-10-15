@@ -17,7 +17,9 @@ public sealed class SpotifyImporter(ImportLimits? limits = null) : IDataImporter
 {
     private readonly ImportLimits limits = limits ?? new();
     public string Provider => "Spotify";
-    public string Version => "1.0.0";
+    public string Version => "2.0.0";
+
+    internal IAsyncEnumerable<ImportRecord> ReadJsonAsync(Stream stream, string name, CancellationToken ct) => ParseAsync(stream, name, ct);
 
     public async IAsyncEnumerable<ImportRecord> ReadAsync(string path, IProgress<ImportProgress>? progress,
         [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -135,7 +137,9 @@ public sealed class SpotifyImporter(ImportLimits? limits = null) : IDataImporter
             GetString(row, "master_metadata_album_artist_name") ?? GetString(row, "episode_show_name"),
             GetString(row, "master_metadata_album_album_name"), ms, isEpisode ? "Podcast" : "Listening",
             GetString(row, "spotify_track_uri") ?? GetString(row, "spotify_episode_uri"), canonical);
-        return new(ev, name, index, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))));
+        var stable = !string.IsNullOrWhiteSpace(ev.Uri) ? PlaybackIdentity.Create(ev.Uri, ended, ms,
+            GetString(row, "username"), GetString(row, "platform")) : null;
+        return new(ev, name, index, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))), StableFingerprint: stable);
     }
 
     private static string? GetString(JsonElement row, string key)

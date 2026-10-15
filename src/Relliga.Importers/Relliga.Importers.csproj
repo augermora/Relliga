@@ -1,3 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup><ProjectReference Include="../Relliga.Application/Relliga.Application.csproj" /></ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Ical.Net" Version="5.2.3" />
+    <PackageReference Include="NodaTime" Version="3.3.5" />
+  </ItemGroup>
 </Project>

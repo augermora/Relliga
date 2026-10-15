@@ -18,10 +18,12 @@ public sealed partial class App : Avalonia.Application
         {
             var collection = new ServiceCollection();
             var dataDirectory = Environment.GetEnvironmentVariable("RELLIGA_DATA_DIRECTORY");
-            collection.AddSingleton(new SqliteHistoryStore(string.IsNullOrWhiteSpace(dataDirectory)
-                ? SqliteHistoryStore.DefaultDatabasePath : Path.Combine(Path.GetFullPath(dataDirectory), "relliga.db")));
+            collection.AddSingleton<ICalendarExpander, CalendarExpander>();
+            collection.AddSingleton(s => new SqliteHistoryStore(string.IsNullOrWhiteSpace(dataDirectory)
+                ? SqliteHistoryStore.DefaultDatabasePath : Path.Combine(Path.GetFullPath(dataDirectory), "relliga.db"),
+                s.GetRequiredService<ICalendarExpander>()));
             collection.AddSingleton<IHistoryStore>(s => s.GetRequiredService<SqliteHistoryStore>());
-            collection.AddSingleton<IDataImporter, SpotifyImporter>();
+            collection.AddSingleton<IDataImporter, ExportImporter>();
             collection.AddSingleton<ImportService>();
             collection.AddSingleton<MainViewModel>();
             services = collection.BuildServiceProvider();

@@ -30,9 +30,9 @@ public sealed partial class MainWindow : Window
     {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Choose a Spotify Extended Streaming History export",
+            Title = "Choose a Spotify or Google Calendar export",
             AllowMultiple = false,
-            FileTypeFilter = [new FilePickerFileType("Spotify exports (JSON or ZIP)") { Patterns = ["*.json", "*.zip"] }]
+            FileTypeFilter = [new FilePickerFileType("Personal data exports (JSON, ICS or ZIP)") { Patterns = ["*.json", "*.ics", "*.zip"] }]
         });
         if (files.Count == 0) return null;
         return files[0].TryGetLocalPath() ?? throw new IOException("Choose a file stored on this device.");

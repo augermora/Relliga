@@ -6,6 +6,8 @@
 - Treat imports as untrusted. Enforce byte, record, depth, entry and expansion limits. Never extract ZIP members to disk. Use parameterized SQL and transactional writes.
 - Preserve nullable source fields, original metadata and provenance. Changes to deduplication must preserve distinct occurrences and include regression tests. Do not silently discard records or exceptions.
 - Add sequential schema migrations; reject future schemas. Do not delete or recreate an existing user library to resolve a migration failure.
+- Store Calendar definitions and explicit cancellation/override components by UID + recurrence identity. Evaluate occurrences only inside bounded query windows; never persist an infinite expansion. Keep date-only and floating values separate from UTC instants. Preserve sequence/timestamp revision ordering, and explicitly reject unsupported recurrence semantics.
+- Preserve the frozen version 1 migration fixture. Do not merge or delete historical playback rows during identity upgrades; preserve occurrence multiplicity and all import provenance.
 - All visible UI controls must work. Keep heavy parsing and SQLite operations off the UI thread. Show loading, cancellation, warnings, and actionable errors. Preserve keyboard access and readable contrast.
 - Use synthetic fixtures only. Test parser failures, security limits, persistence, rollback, cancellation, search and deduplication when changing those behaviors.
 - Before delivery run `dotnet restore`, `dotnet build`, and `dotnet test`. The repository opts into Microsoft Testing Platform in global.json. For a named solution use `dotnet test --solution Relliga.slnx`. Report unverified GUI or platform behavior honestly.

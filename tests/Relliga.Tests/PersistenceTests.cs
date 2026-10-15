@@ -26,7 +26,7 @@ public sealed class PersistenceTests : IAsyncLifetime
     {
         await Import($"[{TestFiles.Row()}]"); store.Dispose(); store = new(Database); await store.InitializeAsync();
         var page = await store.QueryAsync(new()); var ev = Assert.Single(page.Items);
-        Assert.Equal("input.json", ev.SourceFile); Assert.Equal("1.0.0", ev.ImporterVersion);
+        Assert.Equal("input.json", ev.SourceFile); Assert.Equal("2.0.0", ev.ImporterVersion);
         Assert.Equal("Spotify", ev.Provider); Assert.Equal(1, ev.RecordIndex);
         Assert.Equal(1, (await store.GetSummaryAsync()).Sources);
     }
@@ -65,7 +65,7 @@ public sealed class PersistenceTests : IAsyncLifetime
         var result = await Import($"[null,{TestFiles.Row()}]");
         Assert.Equal(1, result.Warnings); Assert.Equal(1, result.Added);
         var op = Assert.Single(await store.GetImportsAsync());
-        Assert.Equal("Completed with warnings", op.Status); Assert.Contains("record 1", op.Message!);
+        Assert.Equal("Partially completed", op.Status); Assert.Contains("record 1", op.Message!);
     }
 
     [Fact] public async Task SearchHandlesUnicodeAndDiacritics()
