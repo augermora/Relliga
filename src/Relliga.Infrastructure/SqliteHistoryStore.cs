@@ -5,8 +5,9 @@ using Relliga.Domain;
 
 namespace Relliga.Infrastructure;
 
-public sealed partial class SqliteHistoryStore(string databasePath, ICalendarExpander? calendarExpander = null) : IHistoryStore, IDisposable
+public sealed partial class SqliteHistoryStore(string databasePath, ICalendarExpander? calendarExpander = null) : IHistoryStore, ILibraryActivityOwner, IDisposable
 {
+    public LibraryActivity Activity { get; } = new();
     private FileStream? ownership;
     private readonly SemaphoreSlim initialization = new(1, 1);
     public string DatabasePath { get; } = Path.GetFullPath(databasePath);
@@ -15,13 +16,15 @@ public sealed partial class SqliteHistoryStore(string databasePath, ICalendarExp
 
     private async Task<SqliteConnection> OpenAsync(CancellationToken ct)
     {
+        if (!activatingRestore && File.Exists(JournalPath))
+            throw new IOException("Restore recovery is pending. Close and reopen Relliga before using this library. Preserve its database, .previous and .restore-journal files.");
         var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         { DataSource = DatabasePath, ForeignKeys = true, DefaultTimeout = 15, Pooling = false }.ToString());
         try { await connection.OpenAsync(ct); return connection; }
         catch { await connection.DisposeAsync(); throw; }
     }
 
-    public async Task InitializeAsync(CancellationToken ct = default)
+    private async Task InitializeCoreAsync(CancellationToken ct)
     {
         await initialization.WaitAsync(ct);
         try
@@ -31,6 +34,8 @@ public sealed partial class SqliteHistoryStore(string databasePath, ICalendarExp
             ownership = new FileStream(DatabasePath + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             try
             {
+                await RecoverRestoreAsync(ct);
+                CleanAbandonedStaging(Path.GetDirectoryName(DatabasePath)!, StagingPrefix);
                 await using var connection = await OpenAsync(ct);
                 var version = Convert.ToInt32(await ScalarAsync(connection, null, "PRAGMA user_version;", ct));
                 if (version > 2) throw new InvalidOperationException("This library was created by a newer Relliga version. Update the application.");
@@ -47,7 +52,7 @@ public sealed partial class SqliteHistoryStore(string databasePath, ICalendarExp
         finally { initialization.Release(); }
     }
 
-    public async Task<long> BeginImportAsync(string fileName, string provider, string version, CancellationToken ct)
+    private async Task<long> BeginImportCoreAsync(string fileName, string provider, string version, CancellationToken ct)
     {
         await using var c = await OpenAsync(ct);
         return Convert.ToInt64(await ScalarAsync(c, null, """

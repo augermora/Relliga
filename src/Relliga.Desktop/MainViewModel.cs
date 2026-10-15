@@ -11,13 +11,13 @@ namespace Relliga.Desktop;
 public partial class MainViewModel(IHistoryStore store, ImportService imports, IDataImporter importer, SqliteHistoryStore library) : ObservableObject
 {
     public Func<Task<string?>>? SelectFile { get; set; }
-    public string[] Sections { get; } = ["Overview", "Import data", "Timeline", "Search", "Import history", "Settings & about"];
+    public string[] Sections { get; } = ["Overview", "Import data", "Timeline", "Search", "Import history", "Library & export", "Settings & about"];
     public string[] SourceOptions { get; } = ["All sources", "Spotify", "Google Calendar"];
     public string[] KindOptions { get; } = ["All event types", "Listening", "Podcast", "Calendar"];
     public ObservableCollection<EventItem> Events { get; } = [];
     public ObservableCollection<ImportItem> RecentImports { get; } = [];
     public string DatabaseLocation => library.DatabasePath;
-    public string Version => "0.2.0";
+    public string Version => "0.3.0";
     private CancellationTokenSource? workCancellation;
     private CancellationTokenSource? queryCancellation;
     private int page;
@@ -27,7 +27,7 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
     private DateTime? suggestedCalendarDate;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsDashboard), nameof(IsImport), nameof(IsTimeline), nameof(IsSearch), nameof(IsHistory), nameof(IsAbout), nameof(IsExplorer), nameof(PageTitle))]
+    [NotifyPropertyChangedFor(nameof(IsDashboard), nameof(IsImport), nameof(IsTimeline), nameof(IsSearch), nameof(IsHistory), nameof(IsLibrary), nameof(IsAbout), nameof(IsExplorer), nameof(PageTitle))]
     private int selectedSection;
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PickFileCommand), nameof(ImportCommand), nameof(PreviousCommand), nameof(NextCommand), nameof(FilterCommand), nameof(ClearFiltersCommand), nameof(PreviousHistoryCommand), nameof(NextHistoryCommand))]
@@ -67,7 +67,8 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
     public bool IsTimeline => SelectedSection == 2;
     public bool IsSearch => SelectedSection == 3;
     public bool IsHistory => SelectedSection == 4;
-    public bool IsAbout => SelectedSection == 5;
+    public bool IsLibrary => SelectedSection == 5;
+    public bool IsAbout => SelectedSection == 6;
     public bool IsExplorer => IsTimeline || IsSearch;
     public bool HasError => Error is not null;
     public bool HasSelection => SelectedEvent is not null;
@@ -168,6 +169,9 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
         {
             Status = "Importing personal history…";
             var result = await Task.Run(() => imports.ImportAsync(ImportPath!, importer.Provider, progress, workCancellation.Token));
+            HealthStatus = "The library changed. Run verification for a current health report.";
+            appliedQuery = null;
+            OnPropertyChanged(nameof(ExportScopeSummary));
             ImportResult = result.Summary;
             if (suggestedCalendarDate is { } date)
             {
@@ -224,6 +228,8 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
                 Provider: SourceFilter == SourceOptions[0] ? null : SourceFilter, Kind: KindFilter == KindOptions[0] ? null : KindFilter);
             var result = await Task.Run(() => store.QueryAsync(query, cancellation.Token));
             if (cancellation.IsCancellationRequested) return;
+            appliedQuery = query with { Page = 0, From = result.WindowFrom ?? query.From, Until = result.WindowUntil ?? query.Until };
+            OnPropertyChanged(nameof(ExportScopeSummary));
             total = result.Total;
             Events.Clear();
             foreach (var item in result.Items) Events.Add(new(item));
@@ -254,6 +260,9 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
     private async Task RefreshSummaryAsync()
     {
         var summary = await Task.Run(() => store.GetSummaryAsync());
+        AvailableSources.Clear();
+        foreach (var source in summary.BySource ?? []) AvailableSources.Add(source.Provider);
+        SelectedRemovalSource = AvailableSources.FirstOrDefault();
         EventCount = summary.Events.ToString("N0");
         SourceCount = summary.Sources.ToString();
         SuccessfulImportCount = summary.SuccessfulImports.ToString("N0");

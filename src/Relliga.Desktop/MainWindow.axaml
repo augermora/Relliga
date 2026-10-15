@@ -18,7 +18,7 @@
         <StackPanel Grid.Row="3" Margin="8,16,0,0" Spacing="7">
           <TextBlock Text="●  Local &amp; private" Foreground="#9ADBC4" FontSize="12" />
           <TextBlock Text="No accounts. No cloud." Classes="muted" FontSize="11" />
-          <TextBlock Text="v0.2.0 · GPLv3" Classes="muted" FontSize="11" />
+          <TextBlock Text="v0.3.0 · GPLv3" Classes="muted" FontSize="11" />
         </StackPanel>
       </Grid>
     </Border>
@@ -116,7 +116,7 @@
         </Grid>
 
         <Grid IsVisible="{Binding IsHistory}" RowDefinitions="Auto,*,Auto">
-          <TextBlock Text="Every import, with a clear account of what was preserved." Classes="muted" Margin="0,0,0,20" TextWrapping="Wrap" />
+          <StackPanel Spacing="12" Margin="0,0,0,20"><TextBlock Text="Every import, with a clear account of what was preserved." Classes="muted" TextWrapping="Wrap" /><Button Content="Review removal of selected batch…" Command="{Binding RemoveImportCommand}" HorizontalAlignment="Left" /></StackPanel>
           <Grid Grid.Row="1" ColumnDefinitions="*,16,*">
             <ListBox ItemsSource="{Binding RecentImports}" SelectedItem="{Binding SelectedImport}" Background="#141D2B" AutomationProperties.Name="All import operations">
               <ListBox.ItemTemplate><DataTemplate x:DataType="local:ImportItem"><TextBlock Text="{Binding Label}" TextWrapping="Wrap" LineHeight="23" /></DataTemplate></ListBox.ItemTemplate>
@@ -126,15 +126,47 @@
           <Grid Grid.Row="2" ColumnDefinitions="*,Auto,8,Auto" Margin="0,16,0,0"><TextBlock Text="{Binding HistoryPageLabel}" Classes="muted" VerticalAlignment="Center" /><Button Grid.Column="1" Content="← Previous" Command="{Binding PreviousHistoryCommand}" /><Button Grid.Column="3" Content="Next →" Command="{Binding NextHistoryCommand}" /></Grid>
         </Grid>
 
+        <ScrollViewer IsVisible="{Binding IsLibrary}" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Spacing="20">
+            <Border Classes="card"><StackPanel Spacing="14">
+              <TextBlock Text="Take your history with you." FontSize="24" FontWeight="SemiBold" />
+              <TextBlock Text="Export every matching record, including results beyond the current page. JSON preserves missing values, source metadata, Calendar definitions and all import origins. CSV is suitable for spreadsheets and protects formula-like text." Classes="muted" TextWrapping="Wrap" LineHeight="24" />
+              <TextBlock Text="FORMAT" Classes="eyebrow" /><ComboBox ItemsSource="{Binding ExportFormats}" SelectedIndex="{Binding ExportFormat}" HorizontalAlignment="Stretch" AutomationProperties.Name="Export format" />
+              <TextBlock Text="SCOPE" Classes="eyebrow" /><ComboBox ItemsSource="{Binding ExportScopes}" SelectedIndex="{Binding ExportScope}" HorizontalAlignment="Stretch" AutomationProperties.Name="Export scope" />
+              <TextBlock Text="{Binding ExportScopeSummary}" Classes="muted" TextWrapping="Wrap" LineHeight="23" />
+              <Grid ColumnDefinitions="*,12,*" IsEnabled="{Binding ExportUsesDates}"><TextBox Text="{Binding FromDate}" PlaceholderText="From YYYY-MM-DD" AutomationProperties.Name="Export from date" /><TextBox Grid.Column="2" Text="{Binding ToDate}" PlaceholderText="Through YYYY-MM-DD" AutomationProperties.Name="Export through date" /></Grid>
+              <Button Content="Choose destination &amp; export…" Classes="primary" Command="{Binding ExportDataCommand}" HorizontalAlignment="Left" />
+              <TextBlock Text="Calendar exports contain occurrences in a bounded window. Use a library backup to preserve complete recurring definitions and history for restoration." Classes="muted" TextWrapping="Wrap" FontSize="12" />
+            </StackPanel></Border>
+            <Border Classes="card"><StackPanel Spacing="14">
+              <TextBlock Text="Manage imported sources" FontSize="20" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding SourceStatistics}" Classes="muted" TextWrapping="Wrap" LineHeight="24" />
+              <ComboBox ItemsSource="{Binding AvailableSources}" SelectedItem="{Binding SelectedRemovalSource}" HorizontalAlignment="Stretch" PlaceholderText="Select an imported source" AutomationProperties.Name="Source to remove" />
+              <Button Content="Review source removal…" Command="{Binding RemoveSourceCommand}" HorizontalAlignment="Left" />
+              <TextBlock Text="Review exact stored-record counts before confirming. Remove a specific batch in Import history. Shared records survive; Calendar revisions are recalculated. External originals are untouched. Deletion is logical and does not erase external backups or the previous restore recovery copy." Classes="muted" TextWrapping="Wrap" LineHeight="23" />
+            </StackPanel></Border>
+            <Border Classes="card"><StackPanel Spacing="14"><TextBlock Text="Latest library operation" Classes="eyebrow" /><TextBlock Text="{Binding OwnershipResult}" TextWrapping="Wrap" LineHeight="24" /></StackPanel></Border>
+          </StackPanel>
+        </ScrollViewer>
+
         <ScrollViewer IsVisible="{Binding IsAbout}" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Spacing="20">
-            <Border Classes="card"><StackPanel Spacing="16"><TextBlock Text="Relliga" FontSize="32" FontWeight="SemiBold" /><TextBlock Text="Your digital life, together." FontSize="18" Classes="muted" /><TextBlock Text="Version 0.2.0 · Open source · GNU GPLv3" /><TextBlock Text="Preserve Spotify Extended Streaming History and Google Calendar ICS exports. Explore both in a unified, searchable local timeline. Recurring definitions are stored without infinite expansion; Calendar query windows are bounded to 366 days." Classes="muted" TextWrapping="Wrap" LineHeight="24" /></StackPanel></Border>
+            <Border Classes="card"><StackPanel Spacing="16"><TextBlock Text="Relliga" FontSize="32" FontWeight="SemiBold" /><TextBlock Text="Your digital life, together." FontSize="18" Classes="muted" /><TextBlock Text="Version 0.3.0 · Open source · GNU GPLv3" /><TextBlock Text="Preserve, explore, export and manage your personal digital history. Spotify and Google Calendar stay together in a searchable local library." Classes="muted" TextWrapping="Wrap" LineHeight="24" /></StackPanel></Border>
+            <Border Classes="card"><StackPanel Spacing="14">
+              <TextBlock Text="Backup &amp; restore" FontSize="20" FontWeight="SemiBold" />
+              <TextBlock Text="Create a verified portable ZIP with a consistent SQLite snapshot and SHA-256 checksum. Backups contain sensitive, unencrypted personal information. Store them securely. Original export files are not included." Classes="muted" TextWrapping="Wrap" LineHeight="24" />
+              <WrapPanel><Button Content="Create backup…" Command="{Binding CreateBackupCommand}" Margin="0,0,12,12" /><Button Content="Preview &amp; restore backup…" Command="{Binding RestoreBackupCommand}" Margin="0,0,0,12" /></WrapPanel>
+              <TextBlock Text="Restore replaces the entire active library after validation and confirmation. The previous library is retained as relliga.db.previous until discarded or replaced by the next restore. It can still contain deleted information." Classes="muted" TextWrapping="Wrap" LineHeight="24" />
+              <Button Content="Review discarding recovery copy…" Command="{Binding DiscardRecoveryCommand}" HorizontalAlignment="Left" />
+              <TextBlock Text="{Binding OwnershipResult}" TextWrapping="Wrap" LineHeight="23" />
+            </StackPanel></Border>
+            <Border Classes="card"><StackPanel Spacing="14"><TextBlock Text="Library health" FontSize="20" FontWeight="SemiBold" /><TextBlock Text="{Binding HealthStatus}" Classes="muted" TextWrapping="Wrap" LineHeight="24" /><Button Content="Verify library" Command="{Binding VerifyLibraryCommand}" HorizontalAlignment="Left" /><ProgressBar IsIndeterminate="True" Height="3" IsVisible="{Binding IsBusy}" /></StackPanel></Border>
             <Border Classes="card"><StackPanel Spacing="14"><TextBlock Text="Privacy by design" FontSize="20" FontWeight="SemiBold" /><TextBlock Text="Imported information remains on your device. Relliga has no accounts, telemetry, cloud storage, or external API calls during normal use." TextWrapping="Wrap" LineHeight="24" /><TextBlock Text="The library is not encrypted at rest. Export metadata can include your Spotify username and IP address. Protect your device and backups accordingly." Classes="muted" TextWrapping="Wrap" LineHeight="24" /><TextBlock Text="LOCAL LIBRARY" Classes="eyebrow" /><SelectableTextBlock Text="{Binding DatabaseLocation}" TextWrapping="Wrap" /></StackPanel></Border>
             <Border Classes="card"><StackPanel Spacing="14"><TextBlock Text="Free software. Yours to improve." FontSize="20" FontWeight="SemiBold" /><TextBlock Text="Licensed under the GNU General Public License, version 3. You may use, study, share, and modify Relliga under its terms. Provided without warranty. See LICENSE in the source repository." Classes="muted" TextWrapping="Wrap" LineHeight="24" /></StackPanel></Border>
           </StackPanel>
         </ScrollViewer>
       </Grid>
-      <Grid Grid.Row="3" ColumnDefinitions="*,Auto" Margin="0,18,0,0"><TextBlock Text="{Binding Status}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" /><Button Grid.Column="1" Content="Retry opening library" Command="{Binding InitializeCommand}" IsVisible="{Binding NeedsInitialization}" /></Grid>
+      <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto" Margin="0,18,0,0"><TextBlock Text="{Binding Status}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" /><Button Grid.Column="1" Content="Cancel operation" Command="{Binding CancelCommand}" IsVisible="{Binding IsCancellable}" /><Button Grid.Column="2" Content="Retry opening library" Command="{Binding InitializeCommand}" IsVisible="{Binding NeedsInitialization}" /></Grid>
     </Grid>
   </Grid>
 </Window>

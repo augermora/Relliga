@@ -5,7 +5,7 @@ public sealed record DigitalEvent(
     long? DurationMs, string Kind, string? Uri, string MetadataJson);
 
 public sealed record StoredEvent(long Id, DigitalEvent Event, string Provider, string SourceFile,
-    int RecordIndex, string ImporterVersion, DateTimeOffset ImportedAt, CalendarOccurrence? Calendar = null);
+    int RecordIndex, string ImporterVersion, DateTimeOffset ImportedAt, CalendarOccurrence? Calendar = null, string? StableId = null);
 
 public sealed record ImportRecord(DigitalEvent? Event, string SourceFile, int RecordIndex,
     string? Fingerprint = null, string? Warning = null, CalendarDefinition? Calendar = null,

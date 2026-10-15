@@ -11,6 +11,30 @@ public sealed class MigrationTests : IDisposable
     private readonly TestFiles files = new();
     public void Dispose() => files.Dispose();
 
+    [Fact] public async Task VersionOneBackupMigratesOnlyItsStagedCopyBeforeActivation()
+    {
+        var legacy = Path.Combine(files.DirectoryPath, "legacy-backup.db");
+        await using (var c = new SqliteConnection($"Data Source={legacy};Pooling=False"))
+        {
+            await c.OpenAsync(); using var command = c.CreateCommand(); command.CommandText = V1 + """
+                INSERT INTO import_operations(id,file_name,provider,importer_version,started_at,status) VALUES(7,'synthetic.json','Automatic','1.0.0','2025-01-01T00:00:00Z','Failed');
+                """; await command.ExecuteNonQueryAsync();
+        }
+        var bytes = await File.ReadAllBytesAsync(legacy);
+        var manifest = new BackupManifest(1, 1, "0.2.0", DateTimeOffset.UtcNow, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)), bytes.Length, 0, 0, 1, []);
+        var path = Path.Combine(files.DirectoryPath, "legacy.zip");
+        using (var zip = System.IO.Compression.ZipFile.Open(path, System.IO.Compression.ZipArchiveMode.Create))
+        {
+            await using (var entry = zip.CreateEntry("library.db").Open()) await entry.WriteAsync(bytes);
+            await using var metadata = zip.CreateEntry("manifest.json").Open();
+            await System.Text.Json.JsonSerializer.SerializeAsync(metadata, manifest, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
+        }
+        using var store = new SqliteHistoryStore(Path.Combine(files.DirectoryPath, "target", "relliga.db"), new CalendarExpander());
+        await store.InitializeAsync(); var preview = await store.InspectAsync(path); Assert.Equal(1, preview.Manifest.SchemaVersion);
+        await store.RestoreAsync(preview); Assert.Equal(7, Assert.Single(await store.GetImportsAsync()).Id); Assert.True((await store.VerifyAsync()).Healthy);
+        Assert.Equal(bytes, await File.ReadAllBytesAsync(legacy));
+    }
+
     [Fact] public async Task VersionOneLibraryUpgradesWithoutLosingRowsProvenanceOrOriginalVersions()
     {
         var path = Path.Combine(files.DirectoryPath, "legacy.db");

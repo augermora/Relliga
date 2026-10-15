@@ -8,7 +8,8 @@ namespace Relliga.Infrastructure;
 
 public sealed partial class SqliteHistoryStore
 {
-    public async Task<EventPage> QueryAsync(EventQuery query, CancellationToken ct = default)
+    private async Task<EventPage> QueryCoreAsync(EventQuery query, CancellationToken ct,
+        Func<StoredEvent, SqliteConnection, SqliteTransaction, Task>? sink = null, Func<EventQuery, Task>? prepared = null)
     {
         if (query.Page < 0 || query.PageSize is < 1 or > 200 || query.Text?.Length > 500)
             throw new ArgumentOutOfRangeException(nameof(query), "Use pages of 1–200 events and queries up to 500 characters.");
@@ -28,6 +29,7 @@ public sealed partial class SqliteHistoryStore
             if (calendarExpander is null) throw new InvalidOperationException("Calendar evaluation is not configured.");
         }
         if (from is not null && until <= from) throw new ArgumentException("The end date must follow the start date.");
+        if (prepared is not null) await prepared(query with { From = from, Until = until, Page = 0 });
         var terms = Regex.Matches(query.Text ?? "", @"[\p{L}\p{N}_]+")
             .Select(m => $"\"{m.Value}\"*").Take(30).ToArray();
         var text = terms.Length > 0 ? string.Join(" AND ", terms) : null;
@@ -48,7 +50,7 @@ public sealed partial class SqliteHistoryStore
         if (text is not null) parameters.Add(("$text", text));
         var count = Convert.ToInt64(await ScalarAsync(c, tx, "SELECT COUNT(*) FROM events e " + where, ct, parameters.ToArray())) +
             Convert.ToInt64(await ScalarAsync(c, tx, "SELECT COUNT(*) FROM occurrences;", ct));
-        parameters.Add(("$limit", query.PageSize)); parameters.Add(("$offset", (long)query.Page * query.PageSize));
+        parameters.Add(("$limit", sink is null ? query.PageSize : -1)); parameters.Add(("$offset", sink is null ? (long)query.Page * query.PageSize : 0));
         var references = new List<(long Id, bool Calendar, string? Payload)>();
         using (var cmd = Command(c, tx, """
             WITH timeline AS (
@@ -58,7 +60,13 @@ public sealed partial class SqliteHistoryStore
             SELECT id,calendar,payload FROM timeline ORDER BY sort_key DESC,calendar DESC,id DESC,occurrence_key LIMIT $limit OFFSET $offset;
             """, parameters.ToArray()))
         await using (var r = await cmd.ExecuteReaderAsync(ct))
-            while (await r.ReadAsync(ct)) references.Add((r.GetInt64(0), r.GetBoolean(1), Text(r, 2)));
+            while (await r.ReadAsync(ct))
+            {
+                var reference = (Id: r.GetInt64(0), Calendar: r.GetBoolean(1), Payload: Text(r, 2));
+                if (sink is null) references.Add(reference);
+                else await sink(await ReadStoredEventAsync(c, tx, reference.Id, reference.Calendar,
+                    reference.Payload is null ? null : JsonSerializer.Deserialize<CalendarOccurrence>(reference.Payload), ct), c, tx);
+            }
         var items = new List<StoredEvent>();
         foreach (var reference in references)
             items.Add(await ReadStoredEventAsync(c, tx, reference.Id, reference.Calendar,
@@ -130,7 +138,7 @@ public sealed partial class SqliteHistoryStore
             FROM calendar_components c JOIN import_operations i ON i.id=c.latest_import_id WHERE c.id=$id;
             """ : """
             SELECT e.ended_at,e.title,e.artist,e.album,e.duration_ms,e.kind,e.uri,e.metadata_json,e.provider,
-              e.source_file,e.record_index,e.importer_version,i.started_at FROM events e JOIN import_operations i ON i.id=e.first_import_id WHERE e.id=$id;
+              e.source_file,e.record_index,e.importer_version,i.started_at,e.stable_fingerprint,e.stable_occurrence FROM events e JOIN import_operations i ON i.id=e.first_import_id WHERE e.id=$id;
             """;
         using var cmd = Command(c, tx, sql, ("$id", id)); await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) throw new InvalidDataException("Timeline record disappeared during the query.");
@@ -140,10 +148,13 @@ public sealed partial class SqliteHistoryStore
             var item = occurrence! with { Title = def.Title, Description = def.Description, Location = def.Location };
             return new(id, new(item.EndInstant, item.Title, null, null, null, "Calendar", null,
                 JsonSerializer.Serialize(new { def.Uid, def.RecurrenceId, def.Sequence, def.ModifiedAt, def.RawIcs })), "Google Calendar",
-                r.GetString(0), r.GetInt32(1), r.GetString(2), DateTimeOffset.Parse(r.GetString(3), CultureInfo.InvariantCulture), item);
+                r.GetString(0), r.GetInt32(1), r.GetString(2), DateTimeOffset.Parse(r.GetString(3), CultureInfo.InvariantCulture), item,
+                "calendar:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
+                    JsonSerializer.Serialize(new[] { def.Uid, item.OccurrenceId })))));
         }
         return new(id, new(DateTimeOffset.Parse(r.GetString(0), CultureInfo.InvariantCulture), Text(r, 1), Text(r, 2), Text(r, 3),
             r.GetInt64(4), r.GetString(5), Text(r, 6), r.GetString(7)), r.GetString(8), r.GetString(9), r.GetInt32(10),
-            r.GetString(11), DateTimeOffset.Parse(r.GetString(12), CultureInfo.InvariantCulture));
+            r.GetString(11), DateTimeOffset.Parse(r.GetString(12), CultureInfo.InvariantCulture), StableId:
+                r.GetString(8) + ":" + r.GetString(13) + ":" + r.GetInt32(14).ToString(CultureInfo.InvariantCulture));
     }
 }

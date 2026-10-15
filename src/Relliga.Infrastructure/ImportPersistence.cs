@@ -6,7 +6,7 @@ namespace Relliga.Infrastructure;
 
 public sealed partial class SqliteHistoryStore
 {
-    public async Task<ImportResult> CommitImportAsync(long operationId, string provider,
+    private async Task<ImportResult> CommitImportCoreAsync(long operationId, string provider,
         IAsyncEnumerable<ImportRecord> records, CancellationToken ct)
     {
         await using var c = await OpenAsync(ct);
@@ -152,7 +152,7 @@ public sealed partial class SqliteHistoryStore
         return disposition;
     }
 
-    public async Task FinishUnsuccessfulAsync(long operationId, string status, string message)
+    private async Task FinishUnsuccessfulCoreAsync(long operationId, string status, string message)
     {
         await using var c = await OpenAsync(CancellationToken.None);
         await ExecuteAsync(c, null, """

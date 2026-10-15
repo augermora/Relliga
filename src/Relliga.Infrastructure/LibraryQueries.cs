@@ -6,7 +6,7 @@ namespace Relliga.Infrastructure;
 
 public sealed partial class SqliteHistoryStore
 {
-    public async Task<LibrarySummary> GetSummaryAsync(CancellationToken ct = default)
+    private async Task<LibrarySummary> GetSummaryCoreAsync(CancellationToken ct)
     {
         await using var c = await OpenAsync(ct);
         var sources = new List<SourceStatistics>();
@@ -31,7 +31,7 @@ public sealed partial class SqliteHistoryStore
         return new(sources.Sum(x => x.Events), sources.Count, imports.FirstOrDefault(), successful, sources, total);
     }
 
-    public async Task<IReadOnlyList<ImportOperation>> GetImportsAsync(CancellationToken ct = default, int page = 0, int pageSize = 20)
+    private async Task<IReadOnlyList<ImportOperation>> GetImportsCoreAsync(CancellationToken ct, int page, int pageSize)
     {
         if (page < 0 || pageSize is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(page));
         await using var c = await OpenAsync(ct);
