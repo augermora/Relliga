@@ -12,7 +12,7 @@ public sealed record EventItem(StoredEvent Record)
     private static readonly IBrush CalendarAccent = new SolidColorBrush(Color.Parse("#C5B6FF"));
     private static readonly IBrush PlaybackAccent = new SolidColorBrush(Color.Parse("#9ADBC4"));
     public IBrush AccentBrush => IsCalendar ? CalendarAccent : PlaybackAccent;
-    public string SourceLabel => $"{(IsCalendar ? "▣" : "♫")}  {Record.Provider} · {Record.Event.Kind}";
+    public string SourceLabel => $"{(IsCalendar ? "▣" : Record.Event.Kind == "Message" ? "▤" : "♫")}  {Record.Provider} · {Record.Event.Kind}";
     public string Artist => IsCalendar ? Record.Calendar!.Location ?? "Location not provided" : Record.Event.Artist ?? "Creator not provided";
     public string DateLabel => Record.Calendar is { } cal
         ? cal.IsAllDay ? cal.StartLocal.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) + " · All day"
@@ -21,7 +21,7 @@ public sealed record EventItem(StoredEvent Record)
         : Record.Event.EndedAt!.Value.UtcDateTime.ToString("dd MMM yyyy · HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
     public string PlaybackLabel => Record.Calendar is { } cal
         ? cal.IsAllDay ? "Date-only · End date is exclusive" : cal.IsFloating ? "No timezone assigned in export" : $"Original timezone: {cal.TimeZoneId}"
-        : $"{Record.Event.DurationMs / 3_600_000:00}:{Record.Event.DurationMs / 60_000 % 60:00}:{Record.Event.DurationMs / 1000 % 60:00} played";
+        : Record.Event.Kind == "Message" ? "Telegram message · " + Record.Event.Album : $"{Record.Event.DurationMs / 3_600_000:00}:{Record.Event.DurationMs / 60_000 % 60:00}:{Record.Event.DurationMs / 1000 % 60:00} played";
     public string Details
     {
         get
@@ -29,6 +29,7 @@ public sealed record EventItem(StoredEvent Record)
             var ev = Record.Event;
             using var metadata = JsonDocument.Parse(ev.MetadataJson);
             var formatted = JsonSerializer.Serialize(metadata.RootElement, new JsonSerializerOptions { WriteIndented = true });
+            if (Record.Event.Kind == "Message") return $"{Title}\n{Artist}\n{DateLabel}\nConversation: {ev.Album ?? "Title not provided"}\n\nStable identity: {Record.StableId}\nSource: {Record.SourceFile}\nRecord: {Record.RecordIndex}\nAdapter: {Record.ImporterVersion}\nImported: {Record.ImportedAt:u}\n\nMessage and original source metadata\n{formatted}";
             if (Record.Calendar is { } cal)
                 return $"{Title}\nGoogle Calendar\n\n{DateLabel}\nLocal start: {cal.StartLocal.ToString(cal.IsAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)}\nOccurrence end: {(cal.EndLocal is { } end ? end.ToString(cal.IsAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) : "Not provided")}\n" +
                     $"Time semantics: {(cal.IsAllDay ? "All day (exclusive end date)" : cal.IsFloating ? "Floating wall-clock time; no UTC instant assigned" : cal.TimeZoneId)}\n" +

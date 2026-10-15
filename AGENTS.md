@@ -2,7 +2,8 @@
 
 - Keep Domain independent of frameworks and providers. Application owns use cases and contracts; Infrastructure implements persistence; Importers adapt export formats; Desktop owns UI and composition.
 - Use .NET 10, async I/O, cancellation, dependency injection, CommunityToolkit MVVM, and stable GPLv3-compatible dependencies. Avoid speculative abstractions.
-- Keep user data outside the repository in the per-user application directory. Never add real exports, databases, credentials, telemetry, accounts, or runtime network calls.
+- Keep user data outside the repository. Never add real exports, databases, credentials or telemetry to Git. Network access is limited to explicitly connected providers; offline library browsing and manual imports must remain available.
+- Store live credentials only in the platform vault, outside library backups/exports. Never log authentication inputs. Apply provider deletions transactionally across content, provenance and FTS; exclude ephemeral/protected content. Disconnecting must retain ordinary local history. Never claim live verification from mocked provider tests.
 - Treat imports as untrusted. Enforce byte, record, depth, entry and expansion limits. Never extract ZIP members to disk. Use parameterized SQL and transactional writes.
 - Preserve nullable source fields, original metadata and provenance. Changes to deduplication must preserve distinct occurrences and include regression tests. Do not silently discard records or exceptions.
 - Add sequential schema migrations; reject future schemas. Do not delete or recreate an existing user library to resolve a migration failure.

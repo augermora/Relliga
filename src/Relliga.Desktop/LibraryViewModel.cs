@@ -12,7 +12,7 @@ public partial class MainViewModel
     public Func<Task<string?>>? SelectBackup { get; set; }
     public Func<string, string, Task<bool>>? Confirm { get; set; }
     public string[] ExportFormats { get; } = ["JSON · full metadata & provenance", "CSV · spreadsheet"];
-    public string[] ExportScopes { get; } = ["Current applied timeline / search filters", "Spotify · all playback", "Google Calendar · date range", "Both sources · date range"];
+    public string[] ExportScopes { get; } = ["Current applied timeline / search filters", "Spotify · all playback", "Google Calendar · date range", "All sources · date range", "Telegram · all messages"];
     public ObservableCollection<string> AvailableSources { get; } = [];
     private EventQuery? appliedQuery;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(ExportScopeSummary), nameof(ExportUsesDates))] [NotifyCanExecuteChangedFor(nameof(ExportDataCommand))] private int exportScope;
@@ -20,15 +20,16 @@ public partial class MainViewModel
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(RemoveSourceCommand))] private string? selectedRemovalSource;
     [ObservableProperty] private string healthStatus = "Run verification to check SQLite, provenance and search indexes. Verification makes no repairs.";
     [ObservableProperty] private string ownershipResult = "Export, back up, and manage the information held in this library.";
-    public bool ExportUsesDates => ExportScope >= 2;
+    public bool ExportUsesDates => ExportScope is 2 or 3;
     public bool CanExport => CanWork && !IsQuerying && (ExportScope != 0 || appliedQuery is not null);
     public bool CanRemoveSource => CanWork && SelectedRemovalSource is not null;
     public bool CanRemoveImport => CanWork && SelectedImport is not null;
     private int mutationAttempts;
     public string ExportScopeSummary => ExportScope == 0
         ? appliedQuery is null ? "Apply Timeline or Search filters first. Every matching record will be exported."
-            : $"All matches · {appliedQuery.Provider ?? "both sources"} · {appliedQuery.Kind ?? "all types"} · text: {appliedQuery.Text ?? "none"} · {appliedQuery.From?.ToString("u") ?? "start"} → {appliedQuery.Until?.ToString("u") ?? "end"} (exclusive)"
+            : $"All matches · {appliedQuery.Provider ?? "all sources"} · {appliedQuery.Kind ?? "all types"} · text: {appliedQuery.Text ?? "none"} · {appliedQuery.From?.ToString("u") ?? "start"} → {appliedQuery.Until?.ToString("u") ?? "end"} (exclusive)"
         : ExportScope == 1 ? "All Spotify playback, without a date limit. JSON retains all import origins; CSV includes selected provenance and source metadata."
+        : ExportScope == 4 ? "All locally stored Telegram messages, without a date limit, including metadata and import origins. Session secrets are excluded."
         : "All matching Calendar occurrences / playback in the dates below. Blank dates use Timeline's 90-day Calendar default. Maximum Calendar window: 366 days.";
 
     partial void OnIsBusyChanged(bool value) { OnPropertyChanged(nameof(CanWork)); NotifyLibraryCommands(); }
@@ -97,6 +98,7 @@ public partial class MainViewModel
         {
             0 => appliedQuery ?? throw new InvalidOperationException("Apply Timeline or Search filters before exporting current results."),
             1 => new EventQuery(Provider: "Spotify"),
+            4 => new EventQuery(Provider: "Telegram", Kind: "Message"),
             2 or 3 => new EventQuery(From: ParseDate(FromDate), Until: ParseDate(ToDate)?.AddDays(1), Provider: ExportScope == 2 ? "Google Calendar" : null),
             _ => throw new InvalidOperationException("Choose an export scope.")
         };
@@ -124,6 +126,7 @@ public partial class MainViewModel
         Status = "Validating backup structure, checksums and database…";
         var preview = await Task.Run(() => library.InspectAsync(path, ct));
         if (!await AskAsync("Replace the current library?", preview.Description)) return "Restore cancelled · Current library unchanged";
+        if (synchronization is not null) await synchronization.PauseAsync(ct);
         PrepareLibraryMutation();
         await Task.Run(() => library.RestoreAsync(preview, progress, ct));
         return "Library restored and reopened. The previous library is retained in relliga.db.previous.";
@@ -135,7 +138,10 @@ public partial class MainViewModel
     private Task RemoveImportAsync() => RemoveAsync(() => new(ImportId: SelectedImport?.Record.Id ?? throw new InvalidOperationException("Select a batch in Import history first.")));
     private Task RemoveAsync(Func<DeletionTarget> target) => LibraryWorkAsync("Preparing deletion preview…", async (ct, _) =>
     {
-        var preview = await Task.Run(() => library.PreviewDeletionAsync(target(), ct));
+        var selected = target();
+        if ((selected.Provider == "Telegram" || selected.ImportId is not null && SelectedImport?.Record.Provider.Contains("Telegram", StringComparison.Ordinal) == true) &&
+            await library.GetConnectionAsync("Telegram", ct) is { Automatic: true }) throw new InvalidOperationException("Pause or disconnect Telegram in Connected accounts before deleting its local history, so automatic synchronization cannot repopulate it.");
+        var preview = await Task.Run(() => library.PreviewDeletionAsync(selected, ct));
         if (!await AskAsync("Remove imported data?", preview.Explanation)) return "Deletion cancelled · Library unchanged";
         PrepareLibraryMutation();
         await Task.Run(() => library.DeleteAsync(preview, ct));

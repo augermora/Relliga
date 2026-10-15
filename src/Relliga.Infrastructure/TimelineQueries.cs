@@ -16,7 +16,7 @@ public sealed partial class SqliteHistoryStore
         await using var c = await OpenAsync(ct);
         await ExecuteAsync(c, null, "PRAGMA temp_store=FILE;", ct);
         using var tx = c.BeginTransaction(deferred: true);
-        var includeCalendar = query.Provider is null or "Google Calendar" && query.Kind is null or "Calendar";
+        var includeCalendar = query.ConversationKey is null && (query.Provider is null or "Google Calendar") && (query.Kind is null or "Calendar");
         var hasCalendars = includeCalendar && Convert.ToInt64(await ScalarAsync(c, tx, "SELECT COUNT(*) FROM calendar_components;", ct)) > 0;
         var from = query.From;
         var until = query.Until;
@@ -40,13 +40,13 @@ public sealed partial class SqliteHistoryStore
             """, ct);
         if (hasCalendars) await PopulateOccurrencesAsync(c, tx, from!.Value, until!.Value, text, ct);
         var (where, parameters) = PlaybackFilter(query with { From = from, Until = until }, text);
-        var playbackFrom = PlaybackFrom(text);
+        var playbackFrom = PlaybackFrom(text) + (query.ConversationKey is null ? "" : " JOIN telegram_messages tm ON tm.event_id=e.id");
         var playbackCount = Convert.ToInt64(await ScalarAsync(c, tx, "SELECT COUNT(*) FROM " + playbackFrom + " " + where, ct, parameters.ToArray()));
         var occurrenceCount = Convert.ToInt64(await ScalarAsync(c, tx, "SELECT COUNT(*) FROM occurrences;", ct));
         var count = playbackCount + occurrenceCount;
         parameters.Add(("$limit", sink is null ? query.PageSize : -1)); parameters.Add(("$offset", sink is null ? (long)query.Page * query.PageSize : 0));
         var references = new List<(long Id, bool Calendar, string? Payload)>();
-        var sql = occurrenceCount == 0 ? "SELECT e.id,0,NULL FROM " + playbackFrom + " " + where + " ORDER BY e.ended_at DESC,e.id DESC LIMIT $limit OFFSET $offset;" :
+        var sql = occurrenceCount == 0 ? "SELECT e.id,0,NULL FROM " + playbackFrom + " " + where + (query.ConversationKey is null ? " ORDER BY e.ended_at DESC,e.id DESC" : " ORDER BY tm.message_id DESC,e.id DESC") + " LIMIT $limit OFFSET $offset;" :
             playbackCount == 0 ? "SELECT component_id,1,payload FROM occurrences ORDER BY sort_key DESC,component_id DESC,occurrence_key LIMIT $limit OFFSET $offset;" : """
             WITH timeline AS (
               SELECT e.id,0 AS calendar,e.ended_at AS sort_key,'' AS occurrence_key,NULL AS payload FROM
@@ -83,6 +83,13 @@ public sealed partial class SqliteHistoryStore
         Add("e.ended_at < $until", "$until", query.Until is { } until ? Stamp(until) : null);
         Add("e.provider=$provider", "$provider", query.Provider);
         Add("e.kind=$kind", "$kind", query.Kind);
+        if (query.ConversationKey is { } conversation)
+        {
+            var split = conversation.LastIndexOf(':');
+            if (split <= 0 || conversation.Length > 200 || !long.TryParse(conversation[(split + 1)..], CultureInfo.InvariantCulture, out var chatId)) throw new ArgumentException("Invalid conversation identity.");
+            clauses.Add("e.id IN (SELECT event_id FROM telegram_messages WHERE account_id=$account AND chat_id=$chat)");
+            parameters.Add(("$account", conversation[..split])); parameters.Add(("$chat", chatId));
+        }
         Add("e.id IN (SELECT rowid FROM events_fts WHERE events_fts MATCH $text)", "$text", text);
         return (clauses.Count == 0 ? "" : "WHERE " + string.Join(" AND ", clauses), parameters);
     }
@@ -165,7 +172,7 @@ public sealed partial class SqliteHistoryStore
                     JsonSerializer.Serialize(new[] { def.Uid, item.OccurrenceId })))));
         }
         return new(id, new(DateTimeOffset.Parse(r.GetString(0), CultureInfo.InvariantCulture), Text(r, 1), Text(r, 2), Text(r, 3),
-            r.GetInt64(4), r.GetString(5), Text(r, 6), r.GetString(7)), r.GetString(8), r.GetString(9), r.GetInt32(10),
+            r.GetString(5) == "Message" ? null : r.GetInt64(4), r.GetString(5), Text(r, 6), r.GetString(7)), r.GetString(8), r.GetString(9), r.GetInt32(10),
             r.GetString(11), DateTimeOffset.Parse(r.GetString(12), CultureInfo.InvariantCulture), StableId:
                 r.GetString(8) + ":" + r.GetString(13) + ":" + r.GetInt32(14).ToString(CultureInfo.InvariantCulture));
     }

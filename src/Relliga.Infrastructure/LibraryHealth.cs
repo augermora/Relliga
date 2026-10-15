@@ -17,7 +17,7 @@ public sealed partial class SqliteHistoryStore : ILibraryHealth
         if (version is < 1 or > CurrentSchemaVersion) throw new InvalidDataException($"Unsupported library schema {version}. Supported backup schemas: 1–{CurrentSchemaVersion}.");
         await using var expected = new SqliteConnection("Data Source=:memory:"); await expected.OpenAsync(ct);
         await ExecuteAsync(expected, null, SchemaV1, ct);
-        if (version >= 2) { using var tx = expected.BeginTransaction(); await MigrateV2Async(expected, tx, ct); if (version >= 3) await ExecuteAsync(expected, tx, SchemaV3, ct); tx.Commit(); }
+        if (version >= 2) { using var tx = expected.BeginTransaction(); await MigrateV2Async(expected, tx, ct); if (version >= 3) await ExecuteAsync(expected, tx, SchemaV3, ct); if (version >= 4) await ExecuteAsync(expected, tx, SchemaV4, ct); tx.Commit(); }
         static async Task<List<string>> ReadSchema(SqliteConnection connection, CancellationToken token)
         {
             var result = new List<string>();
@@ -55,6 +55,12 @@ public sealed partial class SqliteHistoryStore : ILibraryHealth
               (SELECT COUNT(*) FROM calendar_origins WHERE NOT json_valid(definition_json));
             """, ct));
         if (invalid > 0) problems.Add($"{invalid:N0} invalid event/provenance relationships or JSON records. Keep the library for recovery; no repairs were attempted.");
+        var invalidMessages = Convert.ToInt64(await ScalarAsync(c, null, """
+            SELECT (SELECT COUNT(*) FROM telegram_messages m JOIN events e ON e.id=m.event_id WHERE e.provider<>'Telegram' OR e.kind<>'Message' OR NOT json_valid(m.message_json)
+              OR m.message_json<>e.metadata_json OR EXISTS(SELECT 1 FROM telegram_deletions d WHERE d.account_id=m.account_id AND d.chat_id=m.chat_id AND d.message_id=m.message_id))
+            + (SELECT COUNT(*) FROM events e WHERE e.provider='Telegram' AND NOT EXISTS(SELECT 1 FROM telegram_messages m WHERE m.event_id=e.id));
+            """, ct));
+        if (invalidMessages > 0) problems.Add("Conversation identity, content or deletion consistency failed.");
         foreach (var table in new[] { "events_fts", "calendar_fts" })
         {
             using var tx = c.BeginTransaction();

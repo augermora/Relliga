@@ -8,6 +8,7 @@ namespace Relliga.Infrastructure;
 public sealed partial class SqliteHistoryStore(string databasePath, ICalendarExpander? calendarExpander = null) : IHistoryStore, ILibraryActivityOwner, IDisposable
 {
     public LibraryActivity Activity { get; } = new();
+    public const int CurrentSchemaVersion = 4;
     private FileStream? ownership;
     private readonly SemaphoreSlim initialization = new(1, 1);
     public string DatabasePath { get; } = Path.GetFullPath(databasePath);
@@ -45,6 +46,7 @@ public sealed partial class SqliteHistoryStore(string databasePath, ICalendarExp
                 if (version == 0) await ExecuteAsync(connection, tx, SchemaV1, ct);
                 if (version < 2) await MigrateV2Async(connection, tx, ct);
                 if (version < 3) await ExecuteAsync(connection, tx, SchemaV3, ct);
+                if (version < 4) await ExecuteAsync(connection, tx, SchemaV4, ct);
                 await ExecuteAsync(connection, tx,
                     "UPDATE import_operations SET status='Interrupted', message='The previous session ended before this import completed. No partial events were saved.' WHERE status='Running';", ct);
                 tx.Commit();

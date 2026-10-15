@@ -44,7 +44,7 @@ foreach ($rid in $RuntimeIdentifiers) {
     if ($metadata.version -ne $version -or -not $metadata.selfContained -or $metadata.trimmed -or $metadata.aot -or $metadata.singleFile) { throw 'Unsafe or inconsistent publish metadata.' }
     $archive = [IO.Compression.ZipFile]::OpenRead((Join-Path $release ($name + '.zip')))
     try {
-        if ($archive.Entries.FullName -match '(?i)\.db($|-)|\.git/|TestResults/|Relliga.Tests|synthetic-spotify|synthetic-calendar') { throw 'Private/test data leaked into the portable archive.' }
+        if ($archive.Entries.FullName -match '(?i)\.db($|-)|\.git/|TestResults/|Relliga.Tests|synthetic-spotify|synthetic-calendar|synthetic-telegram|\.dpapi|Connections/Vault') { throw 'Private/test data leaked into the portable archive.' }
         foreach ($file in $required) { if ($null -eq $archive.GetEntry($file)) { throw "Missing archive runtime file: $file" } }
     }
     finally { $archive.Dispose() }

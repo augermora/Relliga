@@ -36,7 +36,7 @@ public sealed class BackupTests : IAsyncLifetime
         Assert.True(File.Exists(Database + "-wal"));
         await store.CreateAsync(Archive);
         using var archive = ZipFile.OpenRead(Archive); Assert.Equal(new[] { "library.db", "manifest.json" }, archive.Entries.Select(e => e.FullName).OrderBy(n => n).ToArray());
-        var preview = await store.InspectAsync(Archive); Assert.Equal(1, preview.Manifest.FormatVersion); Assert.Equal(3, preview.Manifest.SchemaVersion);
+        var preview = await store.InspectAsync(Archive); Assert.Equal(1, preview.Manifest.FormatVersion); Assert.Equal(4, preview.Manifest.SchemaVersion);
         Assert.Equal(1, preview.Manifest.PlaybackRecords); Assert.Equal(2, preview.Manifest.CalendarComponents); Assert.Equal(2, preview.Manifest.Imports);
         Assert.Equal(new[] { "Google Calendar", "Spotify" }, preview.Manifest.Sources);
         Assert.Empty(Directory.GetDirectories(Path.GetDirectoryName(Database)!, ".relliga-stage-*"));
@@ -161,8 +161,8 @@ public sealed class BackupTests : IAsyncLifetime
         await Assert.ThrowsAsync<InvalidDataException>(() => store.InspectAsync(Archive)); Assert.Single((await store.QueryAsync(new())).Items);
     }
 
-    [Theory] [InlineData("\"schemaVersion\":3", "\"schemaVersion\":999")] [InlineData("\"formatVersion\":1", "\"formatVersion\":2")]
-    [InlineData("\"appVersion\":\"0.4.0\"", "\"appVersion\":\"9.0.0\"")]
+    [Theory] [InlineData("\"schemaVersion\":4", "\"schemaVersion\":999")] [InlineData("\"formatVersion\":1", "\"formatVersion\":2")]
+    [InlineData("\"appVersion\":\"0.5.0\"", "\"appVersion\":\"9.0.0\"")]
     public async Task NewerCompatibilityVersionsAreRejected(string find, string replacement)
     {
         await Play(); await store.CreateAsync(Archive);

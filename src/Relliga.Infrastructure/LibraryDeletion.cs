@@ -20,7 +20,7 @@ public sealed partial class SqliteHistoryStore : ILibraryManagement
     private static async Task PrepareDeletionAsync(SqliteConnection c, SqliteTransaction tx, DeletionTarget target, CancellationToken ct)
     {
         if ((target.Provider is null) == (target.ImportId is null)) throw new ArgumentException("Choose exactly one source or import batch.");
-        if (target.Provider is not null && target.Provider is not ("Spotify" or "Google Calendar")) throw new ArgumentException("Unknown source.");
+        if (target.Provider is not null && target.Provider is not ("Spotify" or "Google Calendar" or "Telegram")) throw new ArgumentException("Unknown source.");
         await ExecuteAsync(c, tx, """
             CREATE TEMP TABLE removed_event_origins AS SELECT o.* FROM event_origins o JOIN events e ON e.id=o.event_id
               WHERE ($op IS NOT NULL AND o.operation_id=$op) OR ($source IS NOT NULL AND e.provider=$source);
@@ -82,6 +82,17 @@ public sealed partial class SqliteHistoryStore : ILibraryManagement
                 THEN 'Podcast' ELSE 'Listening' END
               WHERE provider='Spotify' AND id IN (SELECT id FROM affected_events);
             """, ct);
+        await ExecuteAsync(c, tx, """
+            UPDATE telegram_messages SET message_json=(SELECT metadata_json FROM event_origins o WHERE o.event_id=telegram_messages.event_id
+              ORDER BY datetime(COALESCE(json_extract(metadata_json,'$.EditedAt'),json_extract(metadata_json,'$.SentAt'))) DESC,
+              json_extract(metadata_json,'$.Ingestion')='TDLib' DESC,CASE WHEN json_extract(metadata_json,'$.Ingestion')='TDLib' THEN operation_id END DESC,operation_id ASC LIMIT 1) WHERE event_id IN (SELECT id FROM affected_events);
+            UPDATE events SET metadata_json=(SELECT message_json FROM telegram_messages WHERE event_id=events.id),
+              title=(SELECT json_extract(message_json,'$.Text') FROM telegram_messages WHERE event_id=events.id),
+              artist=(SELECT json_extract(message_json,'$.SenderName') FROM telegram_messages WHERE event_id=events.id),
+              album=(SELECT json_extract(message_json,'$.ChatTitle') FROM telegram_messages WHERE event_id=events.id)
+              WHERE provider='Telegram' AND id IN (SELECT id FROM affected_events);
+            """, ct);
+        await CleanConversationMetadataAsync(c, tx, ct);
         long last = 0;
         while (true)
         {
@@ -96,7 +107,8 @@ public sealed partial class SqliteHistoryStore : ILibraryManagement
             UPDATE import_operations SET file_name='[source data removed]',message=NULL,added=0,duplicates=0,warnings=0,processed=NULL,rejected=NULL,updated=0,
               importer_version='[historical counters and diagnostics removed]',status='Retained provenance',
               provider=CASE WHEN EXISTS (SELECT 1 FROM event_origins o WHERE o.operation_id=import_operations.id)
-                THEN CASE WHEN EXISTS (SELECT 1 FROM calendar_origins o WHERE o.operation_id=import_operations.id) THEN 'Google Calendar + Spotify' ELSE 'Spotify' END ELSE 'Google Calendar' END
+                THEN (SELECT group_concat(provider,' + ') FROM (SELECT DISTINCT e.provider FROM events e JOIN event_origins o ON o.event_id=e.id WHERE o.operation_id=import_operations.id))
+                  || CASE WHEN EXISTS (SELECT 1 FROM calendar_origins o WHERE o.operation_id=import_operations.id) THEN ' + Google Calendar' ELSE '' END ELSE 'Google Calendar' END
               WHERE id IN (SELECT id FROM affected_operations);
             DELETE FROM data_sources WHERE NOT EXISTS (SELECT 1 FROM events e WHERE e.provider=data_sources.provider)
               AND (provider<>'Google Calendar' OR NOT EXISTS (SELECT 1 FROM calendar_components));
@@ -137,7 +149,7 @@ public sealed partial class SqliteHistoryStore : ILibraryManagement
     private static async Task<string> RevisionAsync(SqliteConnection c, SqliteTransaction tx, CancellationToken ct)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        foreach (var table in new[] { "events", "event_origins", "calendar_components", "calendar_origins", "import_operations", "data_sources" })
+        foreach (var table in new[] { "events", "event_origins", "calendar_components", "calendar_origins", "import_operations", "data_sources", "telegram_messages", "telegram_chats", "telegram_participants", "telegram_deletions" })
         {
             hash.AppendData(Encoding.UTF8.GetBytes(table));
             using var cmd = Command(c, tx, $"SELECT * FROM {table} ORDER BY rowid;"); await using var r = await cmd.ExecuteReaderAsync(ct);

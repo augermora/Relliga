@@ -23,7 +23,7 @@ public sealed class RecoveryHardeningTests : IAsyncLifetime
         await Import("Synthetic legacy"); var original = Assert.Single((await store.QueryAsync(new())).Items); store.Dispose();
         await using (var c = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Database, Pooling = false }.ToString()))
         {
-            await c.OpenAsync(); using var cmd = c.CreateCommand(); cmd.CommandText = "DROP INDEX ix_event_origins_event; DROP INDEX ix_calendar_origins_component; DROP INDEX ix_events_provider_date; PRAGMA user_version=2;";
+            await c.OpenAsync(); using var cmd = c.CreateCommand(); cmd.CommandText = "DROP TABLE telegram_messages; DROP TABLE telegram_chats; DROP TABLE telegram_participants; DROP TABLE telegram_deletions; DROP TABLE sync_checkpoints; DROP TABLE connections; DROP INDEX ix_event_origins_event; DROP INDEX ix_calendar_origins_component; DROP INDEX ix_events_provider_date; PRAGMA user_version=2;";
             await cmd.ExecuteNonQueryAsync();
         }
         var bytes = await File.ReadAllBytesAsync(Database); var archivePath = Path.Combine(files.DirectoryPath, "v2.zip");

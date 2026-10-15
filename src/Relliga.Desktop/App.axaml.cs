@@ -44,6 +44,14 @@ public sealed partial class App : Avalonia.Application
             collection.AddSingleton<IHistoryStore>(s => s.GetRequiredService<SqliteHistoryStore>());
             collection.AddSingleton<IDataImporter, ExportImporter>();
             collection.AddSingleton<ImportService>();
+            var connectionDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Relliga", "Connections");
+            var native = Environment.GetEnvironmentVariable("RELLIGA_TDLIB_PATH") ?? Path.Combine(AppContext.BaseDirectory, OperatingSystem.IsWindows() ? "tdjson.dll" : OperatingSystem.IsMacOS() ? "libtdjson.dylib" : "libtdjson.so");
+            collection.AddSingleton<ICredentialVault>(new WindowsCredentialVault(Path.Combine(connectionDirectory, "Vault")));
+            collection.AddSingleton(s => new TelegramConfiguration(s.GetRequiredService<ICredentialVault>(), Path.Combine(connectionDirectory, "TDLib"), databasePath, native));
+            collection.AddSingleton<ITdClientFactory>(new NativeTdClientFactory(native));
+            collection.AddSingleton<TelegramProvider>();
+            collection.AddSingleton<IConnectionStore>(s => s.GetRequiredService<SqliteHistoryStore>());
+            collection.AddSingleton(s => new SynchronizationService(s.GetRequiredService<IConnectionStore>(), s.GetRequiredService<TelegramProvider>()));
             collection.AddSingleton<MainViewModel>();
             services = collection.BuildServiceProvider();
             var window = new MainWindow { DataContext = services.GetRequiredService<MainViewModel>() };

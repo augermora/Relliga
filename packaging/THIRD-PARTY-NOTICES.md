@@ -23,3 +23,10 @@ No NSIS compiler or build tools are bundled with the application. The installer
 uses only current-user installation and never deletes the personal library.
 
 Relliga is not affiliated with Spotify, Google, Microsoft, or Avalonia.
+
+Optional live Telegram support uses the official TDLib JSON C ABI. Native TDLib
+is not bundled in this checkout's generated packages. A live-enabled publisher
+must build/provision its native library and OpenSSL/zlib dependencies, include
+their exact notices, and comply with Telegram's API terms. TDLib uses BSL-1.0;
+the new Microsoft ProtectedData managed dependency uses MIT terms. No account
+credentials or session state may be redistributed with application packages.

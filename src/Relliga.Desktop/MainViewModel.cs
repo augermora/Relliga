@@ -8,12 +8,13 @@ using Relliga.Infrastructure;
 
 namespace Relliga.Desktop;
 
-public partial class MainViewModel(IHistoryStore store, ImportService imports, IDataImporter importer, SqliteHistoryStore library) : ObservableObject
+public partial class MainViewModel(IHistoryStore store, ImportService imports, IDataImporter importer, SqliteHistoryStore library,
+    SynchronizationService? synchronization = null, TelegramProvider? telegramProvider = null) : ObservableObject
 {
     public Func<Task<string?>>? SelectFile { get; set; }
-    public string[] Sections { get; } = ["Overview", "Import data", "Timeline", "Search", "Import history", "Library & export", "Settings & about"];
-    public string[] SourceOptions { get; } = ["All sources", "Spotify", "Google Calendar"];
-    public string[] KindOptions { get; } = ["All event types", "Listening", "Podcast", "Calendar"];
+    public string[] Sections { get; } = ["Overview", "Import data", "Timeline", "Search", "Import history", "Library & export", "Settings & about", "Connected accounts", "Conversations"];
+    public string[] SourceOptions { get; } = ["All sources", "Spotify", "Google Calendar", "Telegram"];
+    public string[] KindOptions { get; } = ["All event types", "Listening", "Podcast", "Calendar", "Message"];
     public ObservableCollection<EventItem> Events { get; } = [];
     public ObservableCollection<ImportItem> RecentImports { get; } = [];
     public string DatabaseLocation => library.DatabasePath;
@@ -29,7 +30,7 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
     private DateTime? suggestedCalendarDate;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsDashboard), nameof(IsImport), nameof(IsTimeline), nameof(IsSearch), nameof(IsHistory), nameof(IsLibrary), nameof(IsAbout), nameof(IsExplorer), nameof(PageTitle))]
+    [NotifyPropertyChangedFor(nameof(IsDashboard), nameof(IsImport), nameof(IsTimeline), nameof(IsSearch), nameof(IsHistory), nameof(IsLibrary), nameof(IsAbout), nameof(IsExplorer), nameof(IsConnections), nameof(IsConversations), nameof(PageTitle))]
     private int selectedSection;
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PickFileCommand), nameof(ImportCommand), nameof(PreviousCommand), nameof(NextCommand), nameof(FilterCommand), nameof(ClearFiltersCommand), nameof(PreviousHistoryCommand), nameof(NextHistoryCommand))]
@@ -44,7 +45,7 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasError))] private string? error;
     [ObservableProperty] private string status = "Opening your local library…";
     [ObservableProperty] private string selectedFile = "No file selected";
-    [ObservableProperty] private string preview = "Choose Spotify history JSON, a Calendar ICS file, or a ZIP containing either format.";
+    [ObservableProperty] private string preview = "Choose Spotify history JSON, Telegram Desktop JSON, Calendar ICS or a compatible ZIP.";
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(ImportCommand))] private string? importPath;
     [ObservableProperty] private string importResult = "Your import results and any warnings will appear here.";
     [ObservableProperty] private string eventCount = "0";
@@ -72,6 +73,8 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
     public bool IsHistory => SelectedSection == 4;
     public bool IsLibrary => SelectedSection == 5;
     public bool IsAbout => SelectedSection == 6;
+    public bool IsConnections => SelectedSection == 7;
+    public bool IsConversations => SelectedSection == 8;
     public bool IsExplorer => IsTimeline || IsSearch;
     public bool HasError => Error is not null;
     public bool HasSelection => SelectedEvent is not null;
@@ -82,7 +85,7 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
     public bool CanImport => CanWork && ImportPath is not null;
     public bool CanPrevious => CanWork && !IsQuerying && page > 0;
     public bool CanNext => CanWork && !IsQuerying && (long)(page + 1) * 50 < total;
-    public bool CanCancel => IsCancellable || IsQuerying;
+    public bool CanCancel => IsCancellable || IsQuerying || LoadingConversation;
     public bool CanPreviousHistory => CanWork && historyPage > 0;
     public bool CanNextHistory => CanWork && (long)(historyPage + 1) * 20 < historyTotal;
 
@@ -90,6 +93,7 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
     {
         if (IsExplorer) { page = 0; SelectedEvent = null; }
         if (CanWork && IsExplorer) FilterCommand.Execute(null);
+        if (CanWork && (IsConnections || IsConversations)) _ = RefreshConnectionsSafelyAsync();
     }
 
     [RelayCommand]
@@ -104,12 +108,14 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
             await RefreshSummaryAsync();
             IsReady = true;
             Status = "Local library ready · Only on this device";
+            await InitializeConnectionsAsync();
         }
         catch (Exception ex) { Error = "Could not open the library. Close any other Relliga window, check storage permissions, then retry.\n" + ex.Message; }
         finally { IsBusy = false; }
     }
 
     [RelayCommand] private void ShowImport() => SelectedSection = 1;
+    [RelayCommand] private void ShowConnections() => SelectedSection = 7;
     [RelayCommand] private void ShowTimeline() => SelectedSection = 2;
     [RelayCommand] private void DismissError() => Error = null;
 
@@ -201,6 +207,7 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
     [RelayCommand(CanExecute = nameof(CanCancel))]
     public void Cancel()
     {
+        conversationCancellation?.Cancel();
         queryCancellation?.Cancel();
         if (workCancellation is null) { if (IsQuerying) Status = "Query cancelled"; return; }
         workCancellation.Cancel(); IsCancellable = false; Status = "Cancelling safely…";
@@ -281,7 +288,7 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
         Sources = summary.Sources == 0 ? "No sources imported yet" : string.Join(" · ", summary.BySource!.Select(x => x.Provider));
         SourceStatistics = string.Join("\n", (summary.BySource ?? []).Select(x => x.Provider == "Google Calendar"
             ? $"Google Calendar · {x.Events:N0} events/series · {x.RecurringDefinitions:N0} recurring series"
-            : $"{x.Provider} · {x.Events:N0} playback events · {x.DurationMs / 3_600_000d:N1} hours played"));
+            : x.Provider == "Telegram" ? $"Telegram · {x.Events:N0} messages" : $"{x.Provider} · {x.Events:N0} playback events · {x.DurationMs / 3_600_000d:N1} hours played"));
         if (summary.Sources == 0) SourceStatistics = "Import a source to see its statistics.";
         historyTotal = summary.TotalImports;
         LatestImport = summary.LatestImport is { } last ? $"{last.Status}\n{last.StartedAt.ToLocalTime():dd MMM yyyy · HH:mm}" : "No imports yet";

@@ -9,6 +9,8 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Activated += async (_,_) => { if (DataContext is MainViewModel vm) await vm.SetConnectionPresenceAsync(true); };
+        Deactivated += async (_,_) => { if (DataContext is MainViewModel vm) await vm.SetConnectionPresenceAsync(false); };
         DataContextChanged += (_, _) =>
         {
             if (DataContext is MainViewModel vm)
@@ -26,8 +28,9 @@ public sealed partial class MainWindow : Window
         };
         Closing += async (_, e) =>
         {
-            if (closingAfterCancellation || DataContext is not MainViewModel vm || !(vm.IsBusy || vm.IsQuerying)) return;
+            if (closingAfterCancellation || DataContext is not MainViewModel vm) return;
             e.Cancel = true;
+            await vm.StopConnectionsAsync();
             vm.Cancel();
             vm.StopBackgroundQueries();
             if (vm.ImportCommand.ExecutionTask is { } importTask) await importTask;
@@ -66,7 +69,7 @@ public sealed partial class MainWindow : Window
             WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = Avalonia.Media.Brush.Parse("#141D2B")
         };
         var cancel = new Button { Content = "Cancel", IsCancel = true, IsDefault = true };
-        var action = title.StartsWith("Remove", StringComparison.Ordinal) ? "Remove data" :
+        var action = title.StartsWith("Disconnect", StringComparison.Ordinal) ? "Disconnect account" : title.StartsWith("Remove", StringComparison.Ordinal) ? "Remove data" :
             title.Contains("current library", StringComparison.Ordinal) ? "Replace library" :
             title.StartsWith("Discard", StringComparison.Ordinal) ? "Discard recovery copy" : "Replace file";
         var confirm = new Button { Content = action, Classes = { "primary" } };
@@ -87,7 +90,7 @@ public sealed partial class MainWindow : Window
     {
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Choose a Spotify or Google Calendar export",
+            Title = "Choose a Spotify, Calendar or Telegram export",
             AllowMultiple = false,
             FileTypeFilter = [new FilePickerFileType("Personal data exports (JSON, ICS or ZIP)") { Patterns = ["*.json", "*.ics", "*.zip"] }]
         });

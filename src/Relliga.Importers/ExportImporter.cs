@@ -10,12 +10,13 @@ namespace Relliga.Importers;
 public sealed class ExportImporter : IDataImporter, IImportInspector
 {
     public string Provider => "Automatic";
-    public string Version => "2.0.0";
+    public string Version => "3.0.0";
     private readonly ImportLimits limits;
     private readonly SpotifyImporter spotify;
     private readonly GoogleCalendarImporter calendar;
+    private readonly TelegramJsonImporter telegram;
     public ExportImporter(ImportLimits? limits = null)
-    { this.limits = limits ?? new(); spotify = new(this.limits); calendar = new(); }
+    { this.limits = limits ?? new(); spotify = new(this.limits); calendar = new(); telegram = new(this.limits); }
 
     public async IAsyncEnumerable<ImportRecord> ReadAsync(string path, IProgress<ImportProgress>? progress,
         [EnumeratorCancellation] CancellationToken ct)
@@ -33,11 +34,13 @@ public sealed class ExportImporter : IDataImporter, IImportInspector
             IAsyncEnumerable<ImportRecord> records;
             if (lead.StartsWith("BEGIN:VCALENDAR", StringComparison.OrdinalIgnoreCase))
             { source = "Google Calendar"; records = calendar.ReadCalendarAsync(replay, member.Name, ct); }
-            else if (lead.StartsWith('[') || lead.StartsWith('{'))
+            else if (lead.StartsWith('{'))
+            { source = "Telegram"; records = telegram.ReadJsonAsync(replay, member.Name, ct); }
+            else if (lead.StartsWith('['))
             { source = "Spotify"; records = spotify.ReadJsonAsync(replay, member.Name, ct); }
             else
             {
-                if (!member.InArchive) throw new InvalidDataException("Unsupported or empty input. Choose Spotify extended history JSON, a Calendar ICS file, or a compatible ZIP.");
+                if (!member.InArchive) throw new InvalidDataException("Unsupported or empty input. Choose Spotify history, Telegram Desktop JSON, Calendar ICS, or a compatible ZIP.");
                 yield return new(null, member.Name, 0, Warning: $"{member.Name}: unsupported archive member skipped.", Rejected: false);
                 continue;
             }
@@ -46,24 +49,24 @@ public sealed class ExportImporter : IDataImporter, IImportInspector
             {
                 bool more; string? failure = null;
                 try { more = await iterator.MoveNextAsync(); }
-                catch (Exception ex) when (member.InArchive && ex is JsonException or CalendarFormatException)
+                catch (Exception ex) when (member.InArchive && ex is JsonException or CalendarFormatException or TelegramFormatException)
                 { more = false; failure = $"{member.Name}: {ex.Message}"; }
                 if (failure is not null)
                 {
                     if (problems.Count < 10) problems.Add(failure);
                     yield return new(null, member.Name, 0, Warning: failure, Provider: source,
-                        ImporterVersion: source == "Spotify" ? spotify.Version : calendar.Version, Rejected: false, IsFileError: true);
+                        ImporterVersion: SourceVersion(source), Rejected: false, IsFileError: true);
                 }
                 if (!more) break;
                 if (++processed > limits.MaxRecords) throw new InvalidDataException("Export exceeds the record limit.");
-                var record = iterator.Current with { Provider = source, ImporterVersion = source == "Spotify" ? spotify.Version : calendar.Version };
+                var record = iterator.Current with { Provider = source, ImporterVersion = SourceVersion(source) };
                 if (record.Warning is not null && problems.Count < 10) problems.Add(record.Warning);
-                if (record.Event is not null || record.Calendar is not null) valid++;
+                if (record.Event is not null || record.Calendar is not null || record.Message is not null) valid++;
                 if (processed % 100 == 0) progress?.Report(new(processed, $"Processing export · {processed:N0} records"));
                 yield return record;
             }
         }
-        if (valid == 0) throw new InvalidDataException("No valid supported records were found. Choose Spotify Extended Streaming History or a valid Calendar export." +
+        if (valid == 0) throw new InvalidDataException("No valid supported records were found. Choose Spotify Extended Streaming History, Telegram Desktop JSON or a valid Calendar export." +
             (problems.Count == 0 ? "" : "\n\n" + string.Join('\n', problems)));
     }
 
@@ -75,7 +78,7 @@ public sealed class ExportImporter : IDataImporter, IImportInspector
         DateTime? suggestedDate = null;
         await foreach (var record in ReadAsync(path, null, ct))
         {
-            if (record.Event is not null || record.Calendar is not null)
+            if (record.Event is not null || record.Calendar is not null || record.Message is not null)
             {
                 records++; sources.Add(record.Provider!);
                 if (record.Calendar?.IsRecurring == true) recurring++;
@@ -90,4 +93,5 @@ public sealed class ExportImporter : IDataImporter, IImportInspector
             "Recurrences are calculated only when browsing a bounded date window. Full validation runs during import." +
             (warnings.Count == 0 ? "" : "\n\nWarnings\n" + string.Join('\n', warnings)), suggestedDate);
     }
+    private string SourceVersion(string source) => source == "Spotify" ? spotify.Version : source == "Telegram" ? telegram.Version : calendar.Version;
 }

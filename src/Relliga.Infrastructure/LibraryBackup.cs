@@ -111,7 +111,7 @@ public sealed partial class SqliteHistoryStore : ILibraryBackup
             !Version.TryParse(manifest.AppVersion, out var appVersion) || appVersion.Major > 0 || appVersion.Minor > Version.Parse(AppInfo.Version).Minor ||
             manifest.DatabaseBytes is <= 0 or > MaxBackupBytes || manifest.DatabaseSha256?.Length != 64 ||
             !manifest.DatabaseSha256.All(Uri.IsHexDigit) || manifest.Sources is null || manifest.Sources.Length > 10 ||
-            manifest.Sources.Any(s => s is not ("Spotify" or "Google Calendar")) || manifest.CreatedAt == default)
+            manifest.Sources.Any(s => s is not ("Spotify" or "Google Calendar" or "Telegram")) || manifest.CreatedAt == default)
             throw new InvalidDataException("Unsupported or invalid backup manifest. Update Relliga for newer formats or schemas.");
         await using (var entry = archive.GetEntry("library.db")!.Open())
         await using (var db = new FileStream(stagedDatabase, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, true))
@@ -181,6 +181,26 @@ public sealed partial class SqliteHistoryStore : ILibraryBackup
             await using (var source = new SqliteConnection($"Data Source={staged};Pooling=False"))
             await using (var target = new SqliteConnection($"Data Source={candidate};Pooling=False"))
             { await source.OpenAsync(ct); await target.OpenAsync(ct); source.BackupDatabase(target); await ExecuteAsync(target, null, "PRAGMA journal_mode=DELETE;", ct); }
+            // Never reactivate live workers from a portable backup. Retain deletion knowledge from this device.
+            await using (var candidateConnection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = candidate, Pooling = false, ForeignKeys = true }.ToString()))
+            {
+                await candidateConnection.OpenAsync(ct);
+                await ExecuteAsync(candidateConnection, null, "ATTACH DATABASE $path AS active_library;", ct, ("$path", DatabasePath));
+                using (var candidateTx = candidateConnection.BeginTransaction())
+                {
+                    await ExecuteAsync(candidateConnection, candidateTx, """
+                        INSERT INTO telegram_deletions SELECT * FROM active_library.telegram_deletions WHERE 1 ON CONFLICT DO NOTHING;
+                        DELETE FROM event_origins WHERE event_id IN (SELECT event_id FROM telegram_messages m JOIN telegram_deletions d ON d.account_id=m.account_id AND d.chat_id=m.chat_id AND d.message_id=m.message_id);
+                        DELETE FROM events WHERE id IN (SELECT event_id FROM telegram_messages m JOIN telegram_deletions d ON d.account_id=m.account_id AND d.chat_id=m.chat_id AND d.message_id=m.message_id);
+                        UPDATE connections SET automatic=0,state='Paused';
+                        DELETE FROM sync_checkpoints;
+                        """, ct);
+                    await CleanConversationMetadataAsync(candidateConnection, candidateTx, ct); candidateTx.Commit();
+                }
+                await ExecuteAsync(candidateConnection, null, "DETACH DATABASE active_library;", ct);
+                var health = await VerifyConnectionAsync(candidateConnection, ct);
+                if (!health.Healthy) throw new InvalidDataException("Restored conversation validation failed: " + health.Description);
+            }
             ct.ThrowIfCancellationRequested(); MaintenanceFault?.Invoke("RestoreBeforeActivation");
             progress?.Report(new(0, "Activating the verified library. Cancellation is paused while recovery is secured…"));
             // Every library connection is closed and pooled connections are disabled. The ownership lock stays held.

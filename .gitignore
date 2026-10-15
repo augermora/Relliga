@@ -409,3 +409,6 @@ FodyWeavers.xsd
 private-data/
 .avalonia-build-tasks/
 !src/Relliga.Desktop/Properties/PublishProfiles/Portable.pubxml
+*.dpapi
+tdlib-data/
+telegram-private/

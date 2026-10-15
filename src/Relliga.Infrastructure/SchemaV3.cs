@@ -2,7 +2,6 @@ namespace Relliga.Infrastructure;
 
 public sealed partial class SqliteHistoryStore
 {
-    public const int CurrentSchemaVersion = 3;
     // Measured provenance scans dominated JSON export and repeated integrity checks.
     // These additive indexes preserve every row and identity in version 1/2 libraries.
     private const string SchemaV3 = """

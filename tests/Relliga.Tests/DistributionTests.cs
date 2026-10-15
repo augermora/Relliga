@@ -14,7 +14,7 @@ public sealed class DistributionTests
         var view = XDocument.Load(Path.Combine(Repository, "src/Relliga.Desktop/MainWindow.axaml"));
         var shortcuts = view.Descendants().Where(e => e.Name.LocalName == "KeyBinding")
             .Where(e => ((string?)e.Attribute("Gesture"))?.StartsWith("Alt+", StringComparison.Ordinal) == true).ToArray();
-        Assert.Equal(7, shortcuts.Length);
+        Assert.Equal(9, shortcuts.Length);
         for (var i = 0; i < shortcuts.Length; i++)
         {
             var gesture = Avalonia.Input.KeyGesture.Parse(shortcuts[i].Attribute("Gesture")!.Value);

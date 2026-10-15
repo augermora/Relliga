@@ -11,6 +11,8 @@
     <KeyBinding Gesture="Alt+D5" Command="{Binding NavigateCommand}" CommandParameter="4" />
     <KeyBinding Gesture="Alt+D6" Command="{Binding NavigateCommand}" CommandParameter="5" />
     <KeyBinding Gesture="Alt+D7" Command="{Binding NavigateCommand}" CommandParameter="6" />
+    <KeyBinding Gesture="Alt+D8" Command="{Binding NavigateCommand}" CommandParameter="7" />
+    <KeyBinding Gesture="Alt+D9" Command="{Binding NavigateCommand}" CommandParameter="8" />
     <KeyBinding Gesture="Ctrl+F" Command="{Binding NavigateCommand}" CommandParameter="3" />
     <KeyBinding Gesture="Ctrl+I" Command="{Binding ShowImportCommand}" />
     <KeyBinding Gesture="Ctrl+E" Command="{Binding NavigateCommand}" CommandParameter="5" />
@@ -27,10 +29,10 @@
           <TextBlock Text="Your digital life,&#10;together." Classes="muted" FontSize="12" LineHeight="19" />
         </StackPanel>
         <TextBlock Grid.Row="1" Text="YOUR LIBRARY" Classes="eyebrow" Margin="12,0,0,12" />
-        <ListBox Grid.Row="2" ItemsSource="{Binding Sections}" SelectedIndex="{Binding SelectedSection}" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Main navigation" AutomationProperties.HelpText="Use arrow keys to choose a section, or Alt plus 1 through 7." KeyboardNavigation.TabNavigation="Once" />
+        <ListBox Grid.Row="2" ItemsSource="{Binding Sections}" SelectedIndex="{Binding SelectedSection}" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Main navigation" AutomationProperties.HelpText="Use arrow keys to choose a section, or Alt plus 1 through 9." KeyboardNavigation.TabNavigation="Once" />
         <StackPanel Grid.Row="3" Margin="8,16,0,0" Spacing="7">
           <TextBlock Text="●  Local &amp; private" Foreground="#9ADBC4" FontSize="12" />
-          <TextBlock Text="No accounts. No cloud." Classes="muted" FontSize="11" />
+          <TextBlock Text="Offline library. Optional connections." Classes="muted" FontSize="11" TextWrapping="Wrap" />
           <TextBlock Text="{Binding VersionLabel}" Classes="muted" FontSize="11" />
         </StackPanel>
       </Grid>
@@ -44,18 +46,59 @@
         <Grid ColumnDefinitions="*,Auto"><ScrollViewer MaxHeight="130" HorizontalScrollBarVisibility="Disabled"><SelectableTextBlock Text="{Binding Error}" TextWrapping="Wrap" Foreground="#FFDAE0" AutomationProperties.Name="Library error" AutomationProperties.LiveSetting="Assertive" /></ScrollViewer><Button Grid.Column="1" Content="Dismiss" Command="{Binding DismissErrorCommand}" Margin="16,0,0,0" VerticalAlignment="Top" /></Grid>
       </Border>
       <Grid Grid.Row="2">
+        <ScrollViewer IsVisible="{Binding IsConnections}" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Spacing="20">
+            <Border Classes="card"><StackPanel Spacing="16">
+              <TextBlock Text="Your accounts, connected." FontSize="28" FontWeight="SemiBold" />
+              <TextBlock Text="Relliga uses the official Telegram API through TDLib. Connect only an account you control. Synchronization runs while this application is open; your library remains available offline." TextWrapping="Wrap" Classes="muted" LineHeight="24" />
+              <TextBlock Text="Telegram" FontSize="22" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding ConnectionState}" FontSize="18" Foreground="#A9C7FF" AutomationProperties.LiveSetting="Polite" />
+              <TextBlock Text="{Binding ConnectionDescription}" TextWrapping="Wrap" LineHeight="24" AutomationProperties.LiveSetting="Polite" />
+              <TextBlock Text="{Binding LastSynchronization}" Classes="muted" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding ConnectedAccountLabel}" Classes="muted" TextWrapping="Wrap" />
+              <WrapPanel><Button Content="Connect / resume" Command="{Binding ConnectAccountCommand}" Classes="primary" Margin="0,0,12,12" /><Button Content="Refresh now" Command="{Binding RefreshAccountCommand}" Margin="0,0,12,12" /><Button Content="Pause automatic sync" Command="{Binding PauseAccountCommand}" Margin="0,0,12,12" /><Button Content="Disconnect…" Command="{Binding DisconnectAccountCommand}" Margin="0,0,0,12" /></WrapPanel>
+              <StackPanel IsVisible="{Binding NeedsAuthorization}" Spacing="12">
+                <TextBlock Text="{Binding AuthorizationKind}" FontWeight="SemiBold" />
+                <TextBox Text="{Binding AuthorizationInput}" PasswordChar="●" AutomationProperties.Name="Telegram authorization input" MaxLength="1024" PlaceholderText="Enter the requested value" />
+                <Button Content="Submit authorization" Command="{Binding SubmitAuthorizationCommand}" HorizontalAlignment="Left" />
+              </StackPanel>
+            </StackPanel></Border>
+            <Border Classes="card"><StackPanel Spacing="12">
+              <TextBlock Text="Private by choice" FontSize="20" FontWeight="SemiBold" />
+              <TextBlock Text="Windows protects persistent session keys with DPAPI for your user. Passwords and verification codes are not saved. Sessions are excluded from library backups. Disconnect keeps local history; local deletion is separate. Opening a connected conversation sends normal read receipts." TextWrapping="Wrap" Classes="muted" LineHeight="24" />
+              <TextBlock Text="Live support covers private cloud chats and groups. Secret chats, channels, disappearing and protected content are excluded. Channels require sponsored-message support before they can be enabled. Attachments are represented by metadata and are never downloaded. The publisher must configure official TDLib and Relliga-owned application credentials; ordinary users should not obtain developer credentials." TextWrapping="Wrap" Classes="muted" LineHeight="24" />
+            </StackPanel></Border>
+          </StackPanel>
+        </ScrollViewer>
+        <Grid IsVisible="{Binding IsConversations}" ColumnDefinitions="250,16,*" RowDefinitions="Auto,*,Auto">
+          <StackPanel Grid.ColumnSpan="3" Spacing="10" Margin="0,0,0,16">
+            <TextBlock Text="Your conversations, on this device." FontSize="20" FontWeight="SemiBold" />
+            <Grid ColumnDefinitions="*,Auto"><TextBox Text="{Binding ConversationFilter}" PlaceholderText="Filter conversation titles…" AutomationProperties.Name="Conversation title filter" /><Button Grid.Column="1" Content="Find conversations" Command="{Binding FindConversationsCommand}" Margin="12,0,0,0" /></Grid>
+          </StackPanel>
+          <ListBox Grid.Row="1" ItemsSource="{Binding Conversations}" SelectedItem="{Binding SelectedConversation}" Background="#141D2B" BorderBrush="#263045" BorderThickness="1" Padding="8" AutomationProperties.Name="Telegram conversations">
+            <ListBox.ItemTemplate><DataTemplate x:DataType="d:ConversationSummary"><StackPanel Spacing="5" Margin="4,8"><TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontWeight="SemiBold" /><TextBlock Text="{Binding Messages, StringFormat='{}{0:N0} messages'}" Classes="muted" FontSize="12" /><TextBlock Text="{Binding Type}" Classes="muted" FontSize="11" /></StackPanel></DataTemplate></ListBox.ItemTemplate>
+          </ListBox>
+          <Grid Grid.Row="1" Grid.Column="2" RowDefinitions="Auto,*,160">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12"><TextBox Text="{Binding ConversationSearch}" PlaceholderText="Search messages in this conversation…" AutomationProperties.Name="Conversation message search" /><Button Grid.Column="1" Content="Search" Command="{Binding SearchConversationCommand}" Margin="12,0,0,0" /></Grid>
+            <ListBox Grid.Row="1" ItemsSource="{Binding Messages}" SelectedItem="{Binding SelectedMessage}" Background="#141D2B" BorderBrush="#263045" BorderThickness="1" Padding="8" AutomationProperties.Name="Conversation messages">
+              <ListBox.ItemTemplate><DataTemplate x:DataType="local:EventItem"><StackPanel Margin="6,10" Spacing="6"><TextBlock Text="{Binding Artist}" FontWeight="SemiBold" Foreground="#A9C7FF" /><TextBlock Text="{Binding Title}" TextWrapping="Wrap" MaxLines="6" TextTrimming="CharacterEllipsis" /><TextBlock Text="{Binding DateLabel}" Classes="muted" FontSize="11" /></StackPanel></DataTemplate></ListBox.ItemTemplate>
+            </ListBox>
+            <ScrollViewer Grid.Row="2" Margin="0,12,0,0" HorizontalScrollBarVisibility="Disabled"><SelectableTextBlock Text="{Binding ConversationDetails}" TextWrapping="Wrap" FontSize="12" /></ScrollViewer>
+          </Grid>
+          <Grid Grid.Row="2" Grid.ColumnSpan="3" ColumnDefinitions="*,Auto,Auto" Margin="0,12,0,0"><TextBlock Text="{Binding ConversationPageLabel}" Classes="muted" TextWrapping="Wrap" VerticalAlignment="Center" /><Button Grid.Column="1" Content="Newer" Command="{Binding NewerMessagesCommand}" Margin="12,0" /><Button Grid.Column="2" Content="Older" Command="{Binding OlderMessagesCommand}" /></Grid>
+        </Grid>
         <ScrollViewer IsVisible="{Binding IsDashboard}" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Spacing="22">
             <Border Classes="card" Background="#1A2940" Padding="30">
               <StackPanel Spacing="14">
                 <TextBlock Text="A little more yours." FontSize="32" FontWeight="SemiBold" />
                 <TextBlock Text="Bring your digital history home. Music, plans, and everyday moments,&#10;preserved together in a timeline that belongs to you." TextWrapping="Wrap" Classes="muted" LineHeight="24" />
-                <Button Content="Bring your history together →" Command="{Binding ShowImportCommand}" HorizontalAlignment="Left" Classes="primary" Margin="0,8,0,0" />
+                <Button Content="Connect an account →" Command="{Binding ShowConnectionsCommand}" HorizontalAlignment="Left" Classes="primary" Margin="0,8,0,0" />
               </StackPanel>
             </Border>
             <Grid ColumnDefinitions="*,16,*,16,1.3*">
-              <Border Classes="card"><StackPanel Spacing="12"><TextBlock Text="PRESERVED RECORDS" Classes="eyebrow" /><TextBlock Text="{Binding EventCount}" FontSize="36" FontWeight="SemiBold" /><TextBlock Text="Plays + Calendar events/series" Classes="muted" FontSize="12" TextWrapping="Wrap" /></StackPanel></Border>
-              <Border Grid.Column="2" Classes="card"><StackPanel Spacing="12"><TextBlock Text="SOURCES" Classes="eyebrow" /><TextBlock Text="{Binding SourceCount}" FontSize="36" FontWeight="SemiBold" /><TextBlock Text="Connected through exports" Classes="muted" FontSize="12" TextWrapping="Wrap" /></StackPanel></Border>
+              <Border Classes="card"><StackPanel Spacing="12"><TextBlock Text="PRESERVED RECORDS" Classes="eyebrow" /><TextBlock Text="{Binding EventCount}" FontSize="36" FontWeight="SemiBold" /><TextBlock Text="Plays, messages + Calendar series" Classes="muted" FontSize="12" TextWrapping="Wrap" /></StackPanel></Border>
+              <Border Grid.Column="2" Classes="card"><StackPanel Spacing="12"><TextBlock Text="SOURCES" Classes="eyebrow" /><TextBlock Text="{Binding SourceCount}" FontSize="36" FontWeight="SemiBold" /><TextBlock Text="Imports + authorized connections" Classes="muted" FontSize="12" TextWrapping="Wrap" /></StackPanel></Border>
               <Border Grid.Column="4" Classes="card"><StackPanel Spacing="16"><TextBlock Text="LATEST IMPORT" Classes="eyebrow" /><TextBlock Text="{Binding LatestImport}" FontSize="16" TextWrapping="Wrap" LineHeight="26" /></StackPanel></Border>
             </Grid>
             <Border Classes="card"><Grid ColumnDefinitions="*,Auto"><StackPanel Spacing="12"><TextBlock Text="Your sources" FontSize="18" FontWeight="SemiBold" /><TextBlock Text="{Binding SourceStatistics}" Classes="muted" TextWrapping="Wrap" LineHeight="24" /><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="{Binding SuccessfulImportCount}" FontWeight="SemiBold" /><TextBlock Text="successful imports" Classes="muted" /></StackPanel><TextBlock Text="Recurring occurrences are calculated in the selected timeline window." Classes="muted" FontSize="12" TextWrapping="Wrap" /></StackPanel><Button Grid.Column="1" Content="Explore timeline →" Command="{Binding ShowTimelineCommand}" VerticalAlignment="Center" Margin="16,0,0,0" /></Grid></Border>
@@ -65,7 +108,7 @@
         <ScrollViewer IsVisible="{Binding IsImport}" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Spacing="20">
             <TextBlock Text="Your history has a home here." FontSize="24" FontWeight="SemiBold" />
-            <TextBlock Text="Add Spotify Extended Streaming History or Google Calendar ICS exports. Files are read locally; nothing is uploaded." Classes="muted" TextWrapping="Wrap" LineHeight="23" />
+            <TextBlock Text="Add Spotify history, Telegram Desktop JSON or Google Calendar ICS exports. Files are read locally; nothing is uploaded." Classes="muted" TextWrapping="Wrap" LineHeight="23" />
             <Border Classes="card" Padding="28">
               <StackPanel Spacing="18">
                 <TextBlock Text="01  CHOOSE AN EXPORT" Classes="eyebrow" />
@@ -93,7 +136,7 @@
 
         <Grid IsVisible="{Binding IsExplorer}" RowDefinitions="Auto,Auto,*,Auto">
           <StackPanel Spacing="12" Margin="0,0,0,16">
-            <TextBlock Text="Music and Calendar, one moment at a time." Classes="muted" IsVisible="{Binding IsTimeline}" />
+            <TextBlock Text="Messages, music and plans, together." Classes="muted" IsVisible="{Binding IsTimeline}" />
             <TextBox x:Name="SearchBox" Text="{Binding SearchText}" PlaceholderText="Search music, calendar titles, descriptions, locations…" IsVisible="{Binding IsSearch}" AutomationProperties.Name="Search text" AutomationProperties.HelpText="Word prefixes are combined with AND. Press Enter to apply." MaxLength="500">
               <TextBox.KeyBindings><KeyBinding Gesture="Enter" Command="{Binding FilterCommand}" /></TextBox.KeyBindings>
             </TextBox>
@@ -174,7 +217,7 @@
               <TextBlock Text="{Binding OwnershipResult}" TextWrapping="Wrap" LineHeight="23" />
             </StackPanel></Border>
             <Border Classes="card"><StackPanel Spacing="14"><TextBlock Text="Library health" FontSize="20" FontWeight="SemiBold" /><TextBlock Text="{Binding HealthStatus}" Classes="muted" TextWrapping="Wrap" LineHeight="24" /><Button Content="Verify library" Command="{Binding VerifyLibraryCommand}" HorizontalAlignment="Left" /><ProgressBar IsIndeterminate="True" Height="3" IsVisible="{Binding IsBusy}" /></StackPanel></Border>
-            <Border Classes="card"><StackPanel Spacing="14"><TextBlock Text="Privacy by design" FontSize="20" FontWeight="SemiBold" /><TextBlock Text="Imported information remains on your device. Relliga has no accounts, telemetry, cloud storage, or external API calls during normal use." TextWrapping="Wrap" LineHeight="24" /><TextBlock Text="The library is not encrypted at rest. Export metadata can include your Spotify username and IP address. Protect your device and backups accordingly." Classes="muted" TextWrapping="Wrap" LineHeight="24" /><TextBlock Text="LOCAL LIBRARY" Classes="eyebrow" /><SelectableTextBlock Text="{Binding DatabaseLocation}" TextWrapping="Wrap" /></StackPanel></Border>
+            <Border Classes="card"><StackPanel Spacing="14"><TextBlock Text="Privacy by design" FontSize="20" FontWeight="SemiBold" /><TextBlock Text="Your library stays on this device. Relliga has no telemetry or cloud storage. An explicitly connected Telegram account communicates with Telegram through official TDLib while the app runs. Manual imports and offline browsing need no connection." TextWrapping="Wrap" LineHeight="24" /><TextBlock Text="The library is not encrypted at rest. Export metadata can include your Spotify username and IP address. Protect your device and backups accordingly." Classes="muted" TextWrapping="Wrap" LineHeight="24" /><TextBlock Text="LOCAL LIBRARY" Classes="eyebrow" /><SelectableTextBlock Text="{Binding DatabaseLocation}" TextWrapping="Wrap" /></StackPanel></Border>
             <Border Classes="card"><StackPanel Spacing="14"><TextBlock Text="Free software. Yours to improve." FontSize="20" FontWeight="SemiBold" /><TextBlock Text="Licensed under the GNU General Public License, version 3. You may use, study, share, and modify Relliga under its terms. Provided without warranty. See LICENSE in the source repository." Classes="muted" TextWrapping="Wrap" LineHeight="24" /></StackPanel></Border>
           </StackPanel>
         </ScrollViewer>

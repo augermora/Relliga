@@ -31,13 +31,20 @@ public sealed partial class SqliteHistoryStore
                     if (samples.Count < 100) samples.Add(record.Warning);
                 }
                 if (record.IsFileError) fileErrors++;
-                if (record.Event is null && record.Calendar is null)
+                if (record.Event is null && record.Calendar is null && record.Message is null)
                 {
                     if (record.Rejected) { processed++; rejected++; }
                     continue;
                 }
                 processed++;
                 await ExecuteAsync(c, tx, "INSERT INTO data_sources(provider) VALUES($p) ON CONFLICT DO NOTHING;", ct, ("$p", source));
+                if (record.Message is { } message)
+                {
+                    var disposition = await SaveMessageAsync(c, tx, message, record.SourceFile, record.RecordIndex, operationId, version ?? "1.0.0", ct);
+                    if (disposition == "Added") added++; else if (disposition == "Updated") updated++; else duplicates++;
+                    if (disposition == "Conflict") { warnings++; if (samples.Count < 100) samples.Add($"{record.SourceFile}, record {record.RecordIndex}: conflicting Telegram text without a newer revision. Existing content retained; incoming provenance preserved."); }
+                    continue;
+                }
                 if (record.Calendar is { } calendar)
                 {
                     var disposition = await SaveCalendarAsync(c, tx, calendar, record, operationId, version ?? "1.0.0", ct);
