@@ -18,10 +18,29 @@ public sealed partial class App : Avalonia.Application
         {
             var collection = new ServiceCollection();
             var dataDirectory = Environment.GetEnvironmentVariable("RELLIGA_DATA_DIRECTORY");
+            string databasePath;
+            try { databasePath = AppDataPaths.ResolveDatabasePath(dataDirectory); }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException)
+            {
+                var close = new Avalonia.Controls.Button { Content = "Close Relliga", HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left };
+                var failure = new Avalonia.Controls.Window
+                {
+                    Title = "Relliga — Library location unavailable", Width = 640, Height = 350,
+                    Content = new Avalonia.Controls.StackPanel
+                    {
+                        Margin = new Thickness(28), Spacing = 20, Children =
+                        {
+                            new Avalonia.Controls.TextBlock { Text = "Choose a safe library location", FontSize = 23 },
+                            new Avalonia.Controls.TextBlock { Text = ex.Message, TextWrapping = Avalonia.Media.TextWrapping.Wrap }, close
+                        }
+                    }
+                };
+                close.Click += (_, _) => failure.Close(); desktop.MainWindow = failure;
+                System.Diagnostics.Trace.TraceError(ex.ToString());
+                base.OnFrameworkInitializationCompleted(); return;
+            }
             collection.AddSingleton<ICalendarExpander, CalendarExpander>();
-            collection.AddSingleton(s => new SqliteHistoryStore(string.IsNullOrWhiteSpace(dataDirectory)
-                ? SqliteHistoryStore.DefaultDatabasePath : Path.Combine(Path.GetFullPath(dataDirectory), "relliga.db"),
-                s.GetRequiredService<ICalendarExpander>()));
+            collection.AddSingleton(s => new SqliteHistoryStore(databasePath, s.GetRequiredService<ICalendarExpander>()));
             collection.AddSingleton<IHistoryStore>(s => s.GetRequiredService<SqliteHistoryStore>());
             collection.AddSingleton<IDataImporter, ExportImporter>();
             collection.AddSingleton<ImportService>();

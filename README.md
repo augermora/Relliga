@@ -4,7 +4,7 @@
 
 Relliga is a local-first, open-source desktop application for preserving and exploring personal data exports. Your history stays on your device: no account, telemetry, cloud storage, or external API calls during normal use.
 
-## Implemented in 0.3.0
+## Implemented in 0.4.0
 
 - Import Spotify Extended Streaming History JSON and Google Calendar ICS, standalone or together inside ZIP archives. Formats are detected from contents, including archive members with arbitrary filenames.
 - Preview sampled records and warnings, cancel processing, and review results in a paged import history with source, date, version, status, processed/imported/updated/skipped/rejected counters, and diagnostics.
@@ -18,6 +18,9 @@ Relliga is a local-first, open-source desktop application for preserving and exp
 - Preview and confirm removal of sources or individual import batches while retaining shared records and surviving Calendar revisions.
 - Create verified offline ZIP backups using SQLite snapshots; preview and restore compatible libraries with a previous-library recovery copy and interruption recovery.
 - Verify SQLite, schema, foreign keys, provenance and search-index health from Settings without automatic repair.
+- Run a self-contained Windows x64 portable build or per-user NSIS installer, with application icons, version metadata, dependency notices and SHA-256 checksums.
+- Use keyboard navigation shortcuts, visible control focus, accessible status/error regions and safer confirmation defaults. Cancelled previews preserve the current search and selection.
+- Upgrade existing libraries through additive schema 3 indexes that accelerate provenance, integrity checks and filtered queries without changing event identity.
 
 ## Stack and architecture
 
@@ -44,15 +47,52 @@ From PowerShell:
 Set-Location C:\Dev\Relliga
 dotnet restore
 dotnet build --no-restore
-dotnet test --no-build --no-restore
+dotnet test --solution Relliga.slnx --no-build --no-restore
 dotnet run --project .\src\Relliga.Desktop\Relliga.Desktop.csproj --no-build
 ```
 
-After a Debug build, you can also run `C:\Dev\Relliga\src\Relliga.Desktop\bin\Debug\net10.0\Relliga.Desktop.exe` directly with the .NET 10 runtime installed. The adjacent build output files are required. No installer is included yet.
+After a Debug build, you can also run `C:\Dev\Relliga\src\Relliga.Desktop\bin\Debug\net10.0\Relliga.exe` directly with the .NET 10 runtime installed. The adjacent build output files are required. Published self-contained builds include the runtime.
 
 The source targets Windows, macOS and Linux through Avalonia. Native desktop dependencies and platform testing are still required on macOS/Linux; this iteration is validated on Windows only. If a restricted build environment blocks MSBuild worker processes, use `dotnet build --no-restore -m:1 /nodeReuse:false /p:UseSharedCompilation=false`. The test runner requires local named-pipe access.
 
-For isolated development or GUI testing, set `RELLIGA_DATA_DIRECTORY` to a temporary directory outside the repository before launching. Leave it unset for the normal per-user library. Settings displays the actual library path.
+For isolated development or GUI testing, set `RELLIGA_DATA_DIRECTORY` to an absolute temporary directory outside the repository before launching. Relative overrides and locations inside the application directory are rejected with a startup message. Leave it unset for the normal per-user library. Settings displays the actual library path.
+
+## Windows distribution
+
+The **portable ZIP** contains the entire application and .NET runtime. Extract it into a writable folder and open `Relliga.exe`; no SDK/runtime installation or administrator access is required. Keep its adjacent files together. Data remains in `%LOCALAPPDATA%\Relliga`, rather than the extracted directory.
+
+The **installer** installs for the current user into `%LOCALAPPDATA%\Programs\Relliga`, adds a Start Menu shortcut and registers an uninstaller in Windows Installed Apps. It does not launch Relliga automatically. Close the app before reinstalling/upgrading/uninstalling; a running executable blocks these operations before files change. Installation never opens or migrates the personal database. Ordinary uninstallation removes only packaged application files, shortcut and registration; libraries, exports, backups and unrelated files remain. The application migrates compatible libraries when subsequently launched.
+
+Artifacts are **unsigned development builds**. Windows may display SmartScreen/reputation warnings; no signing, certificate trust, notarization or security-warning bypass is provided. A legitimate signing/distribution process remains future work. Automatic updates are not implemented.
+
+To reproduce from the checkout, install **.NET SDK 10**, **PowerShell 7**, and optionally **[NSIS 3.x](https://nsis.sourceforge.io/Download)** for the installer:
+
+```powershell
+Set-Location C:\Dev\Relliga
+pwsh -File .\scripts\Publish-Portable.ps1 -RuntimeIdentifier win-x64
+pwsh -File .\scripts\Build-WindowsInstaller.ps1 -CompilerPath 'C:\Program Files (x86)\NSIS\Bin\makensis.exe'
+pwsh -File .\scripts\Test-Distribution.ps1
+```
+
+The installer script also finds `makensis.exe` on PATH or in the usual NSIS directory. If the compiler is unavailable, it reports the exact prerequisite and produces no installer; the portable artifact remains usable. Build scripts never download/install NSIS themselves. The NSIS core/zlib installer components use permissive [zlib/libpng terms](https://nsis.sourceforge.io/License); full notices are bundled.
+
+Outputs are under `artifacts/distribution/0.4.0/`: `Relliga-0.4.0-win-x64-portable/`, its `.zip`, `Relliga-0.4.0-win-x64-installer.exe`, and `SHA256SUMS.txt`. Use `Get-FileHash -Algorithm SHA256` to compare an artifact against that file. Repeat with `-Replace` to replace generated output deliberately. `-OutputRoot` supports spaces/Unicode but must remain inside repository `artifacts/`; linked output directories are rejected. ZIPs and installers include GPLv3, runtime/native notices, dependency inventory and package license/attribution files. These are reproducible build commands, not a claim of byte-identical ZIP/installer output across timestamps, SDKs or toolchains.
+
+Before sharing GPLv3 binaries externally, provide the complete corresponding source for the exact build, including local modifications and packaging scripts. Local development artifacts are not automatically published or accompanied by a source offer. Generated binaries, datasets and build-tool downloads stay ignored by Git. Python is needed only to regenerate the checked-in icon via `scripts/Generate-AppIcon.py`.
+
+To validate Windows distribution manually:
+
+1. Compare the package SHA-256 with `SHA256SUMS.txt`. Extract the portable ZIP, keep its files together, and open `Relliga.exe`. Alternatively run `Relliga-0.4.0-win-x64-installer.exe`, review the GPLv3 page, complete installation, and open Relliga from the Start Menu. The installer does not launch it automatically.
+2. For a disposable test, launch from PowerShell with `$env:RELLIGA_DATA_DIRECTORY = Join-Path $env:TEMP ('Relliga-QA-' + [guid]::NewGuid().ToString('N'))` and `& "$env:LOCALAPPDATA\Programs\Relliga\Relliga.exe"`, or use the extracted executable's full path. Confirm that Settings shows this isolated location and version 0.4.0. Keep this same environment value for subsequent launches.
+3. Follow the synthetic-data walkthrough below, including search, export, backup, restore preview and health. Tab through controls, use Ctrl+F/Ctrl+I/Ctrl+E and Alt+1…7, resize/maximize/restore the window, and inspect long details. Check 100%, 150% and 200% DPI and screen-reader output on suitable test machines; those combinations are not certified here.
+4. Close Relliga and reopen it with the same temporary directory; counts and records must persist. With the installed app running, try the installer again: it must ask you to close Relliga before changing files. Close it and reinstall; the shortcut, version and library must remain correct. A historical cross-version installer upgrade remains a separate release validation task.
+5. Close Relliga and uninstall through Windows Installed apps or `%LOCALAPPDATA%\Programs\Relliga\Uninstall.exe`. Application files, shortcut and registration should disappear; the separate library and external backups/exports must remain. Extracted portable files have no registration; removing that application folder does not remove the separate library. Never manually remove personal libraries as part of ordinary application cleanup.
+
+## Platform preparation and keyboard access
+
+Windows x64 is the primary verified desktop target (this development machine runs Windows build 26300). Linux x64 and macOS ARM64 can be cross-published with the same script using `-RuntimeIdentifier linux-x64` or `osx-arm64`. Run `Test-Distribution.ps1 -RuntimeIdentifiers win-x64,linux-x64,osx-arm64` after generating all three. Cross-publish output is preparation, not native GUI validation or an installer. On Linux, preserve executable permissions (`chmod +x Relliga`) after ZIP extraction; the native X11/fontconfig/ICU/OpenGL requirements depend on the distribution. macOS output is a raw unsigned directory, not a notarized `.app` or installer. Consult [Avalonia's supported platforms](https://docs.avaloniaui.net/docs/supported-platforms) and [.NET publishing guidance](https://learn.microsoft.com/dotnet/core/deploying/) for platform prerequisites. No Linux/macOS GUI verification is claimed from Windows.
+
+Use **Alt+1…7** for the seven navigation sections, **Ctrl+F** for Search, **Ctrl+I** for Import and **Ctrl+E** for Library & export. Search receives keyboard focus; Enter applies its query. Tab/Shift+Tab traverse controls; arrow keys operate navigation lists and selectors. Escape requests cancellation when an operation/query permits it. Confirmation dialogs initially focus Cancel, make Enter default to Cancel, and name their destructive action explicitly. Status/error regions use Avalonia live-region metadata. Per-monitor DPI awareness and wrapping layouts are configured; full screen-reader, text-scaling and WCAG conformance audits remain outstanding.
 
 ## Importing Spotify data
 
@@ -101,7 +141,7 @@ Deletion is **logical, not forensic or cryptographic erasure**. SQLite free page
 
 In **Settings & about**, choose **Create backup** and a destination outside the managed library directory. The app serializes library operations, uses SQLite's `BackupDatabase` API to snapshot live/WAL data, verifies the snapshot and completed archive, then atomically publishes it. No external originals, directory contents, logs, caches or credentials are copied. The database is currently the only required managed asset.
 
-**Backup format 1** is a ZIP containing exactly `manifest.json` and `library.db`. The manifest records format/schema/application versions, creation time, database length and SHA-256, playback/component/import counts and source names. Format 1 accepts database schemas 1–2 from Relliga versions through 0.3.x; older databases migrate only in staging. Newer versions/schemas, unknown database schema objects, invalid counts, checksum mismatches, corrupt databases and inconsistent FTS/provenance are rejected. SHA-256 detects corruption; it does not authenticate an archive whose database and manifest were both intentionally replaced. Restore only backups you trust.
+**Backup format 1** is a ZIP containing exactly `manifest.json` and `library.db`. The manifest records format/schema/application versions, creation time, database length and SHA-256, playback/component/import counts and source names. Format 1 accepts database schemas 1–3 from Relliga versions through 0.4.x; older databases migrate only in staging. Newer versions/schemas, unknown database schema objects, invalid counts, checksum mismatches, corrupt databases and inconsistent FTS/provenance are rejected. SHA-256 detects corruption; it does not authenticate an archive whose database and manifest were both intentionally replaced. Restore only backups you trust.
 
 Archives/database payloads are limited to **2 GiB**, manifests to **64 KiB**, compression ratio to **500:1**, and central directories to **4 KiB / exactly two entries**. ZIP64, archive comments, extra/duplicate entries, paths and links are rejected before activation. Fixed filenames are streamed to isolated, bounded staging; contained paths are never used. Do not manually repackage backups using a tool that adds comments or extra files.
 
@@ -115,13 +155,13 @@ Backups, staging, recovery copies, exports and the active database are **unencry
 
 ## Persistence, privacy and limitations
 
-- Windows stores the library at `%LOCALAPPDATA%\Relliga\relliga.db`; other platforms use .NET's per-user LocalApplicationData location. Application data is outside the source checkout. SQLite uses WAL, foreign keys, versioned transactional migrations and indexed queries. Schema version 2 upgrades version 1 libraries without deleting rows, provenance or original importer versions.
+- Windows stores the library at `%LOCALAPPDATA%\Relliga\relliga.db`; other platforms use .NET's per-user LocalApplicationData location. Application data is outside the source checkout. SQLite uses WAL, foreign keys, versioned transactional migrations and indexed queries. Schema 3 upgrades schemas 1/2 without deleting rows, provenance or original importer versions. Version 0/unrecognized nonempty schemas are rejected before initialization.
 - The library is **not encrypted at rest**. Full export metadata may include Spotify usernames, IP addresses or other sensitive information. Protect your device and backups. Original source files are read without modification.
 - Prefer the in-app portable backup. For manual filesystem copies, close Relliga and preserve the database together with sidecars and any recovery journal/copy; copying a live database alone is unsafe.
 - Playback identity uses media URI, UTC end instant, played duration, account and device, plus multiplicity within the selected input. Title, album, IP and similar metadata changes no longer create new rows when this identity is available. Without a URI, canonical JSON remains the conservative fallback. Spotify exports contain no universal playback event ID: two physically distinct plays with identical identity fields in separate exports remain indistinguishable. Multiplicity is preserved up to the highest observed count, and device/account differences remain distinct. Historical rows already duplicated by version 0.1 are preserved rather than destructively merged during migration. Incoming metadata remains in provenance.
 - Preview samples at most 1,000 valid events and does not guarantee the remainder of the input is valid. Progress is record-based feedback rather than a percentage. Large imports still require a bounded in-memory dictionary of event fingerprints.
 - Search matches Unicode word prefixes, combining terms with AND. It is not arbitrary substring or advanced query syntax. History is paged in groups of 20; version 0.1 operations display unknown processed/rejected counters honestly. Dashboard Calendar counts represent logical events/series, not an infinite total of recurring occurrences; import counters count decoded components.
-- Spotify and Calendar are implemented. There is no live synchronization, encryption, installer, localization or automatic update service yet. Full screen-reader auditing and macOS/Linux GUI verification remain outstanding.
+- Spotify and Calendar are implemented. There is no live synchronization, encryption, localization or automatic update service. Windows development packages are unsigned. Full screen-reader auditing and macOS/Linux GUI verification remain outstanding.
 
 ## Test both sources on Windows without personal data
 
@@ -144,11 +184,37 @@ dotnet run --project C:\Dev\Relliga\src\Relliga.Desktop\Relliga.Desktop.csproj -
 
 Close the test app and unset `RELLIGA_DATA_DIRECTORY` in that shell to return to the normal library. Both fixtures contain synthetic data only.
 
+## Measured performance
+
+Run `pwsh -File .\scripts\Measure-Performance.ps1 -Sizes 10000,100000,1000000 -Label local -SkipLargeArtifacts`. The existing test executable supplies the benchmark entry point; no additional solution project is needed. Reports and deterministic synthetic fixtures are generated locally, never committed. JSON reports live in `artifacts/benchmarks/`; temporary libraries are retained under `%TEMP%/Relliga.Benchmark` for investigation. The flag skips exports/backup/restore only at one million plays.
+
+Measured on 15 October 2026: Intel Core i7-1165G7 (4 cores/8 threads), 16 GiB RAM, Windows build 26300, SDK 10.0.401, .NET 10.0.12, Release, workstation GC. Queries report medians of five warm-cache runs; imports/artifact operations are single wall-clock observations, including validation. These are local observations, not latency guarantees.
+
+| Operation | 10k plays + 100 Calendar definitions | 100k + 1,000 | 1m + 1,000 |
+| --- | ---: | ---: | ---: |
+| Spotify import | 2.44 s | 37.35 s | 417.86 s |
+| First / last playback page | 9.7 / 8.9 ms | 28.0 / 43.7 ms | 195.3 / 290.7 ms |
+| Rare / common term search | 3.3 / 30.2 ms | 8.4 / 329.3 ms | 38.4 / 3,026.1 ms |
+| Playback date filter | 9.3 ms | 24.8 ms | 27.9 ms |
+| Calendar / mixed January window | 72.4 / 64.7 ms | 279.5 / 251.6 ms | 172.7 / 216.2 ms |
+| CSV / JSON export, January window | 0.64 / 3.41 s | 4.09 / 15.94 s | Not measured |
+| Verified backup / restore | 0.93 / 0.92 s | 11.38 / 9.67 s | Not measured |
+| SQLite database size | 15.4 MiB | 154.5 MiB | 1,540.2 MiB |
+| Cumulative process peak working set | 79.1 MiB | 137.8 MiB | 165.4 MiB |
+
+The input uses 500 track titles, 60 artists, rare terms every 1,000 plays, unique 30-second timestamps, and mixed all-day/floating/zoned/weekly Calendar definitions. Large playback inputs are split into supported 100k-record files. Calendar queries and exports use January 2025, not an unbounded recurrence expansion. Memory figures include native/runtime memory and are cumulative across dataset sizes in one harness process; they exclude the desktop GUI. Managed allocation totals in the report measure allocation traffic, not retained heap.
+
+Before optimization, the same quiet 10k harness measured JSON export **51.15 s**, backup **36.24 s**, and restore **36.92 s**. Additive provenance indexes and planner-friendly predicates reduced those final observations to **3.41 s**, **0.93 s**, and **0.92 s**. Query-plan checks confirm indexed provenance lookups and provider/date scans; text search uses FTS row IDs without scanning the provider index. CSV and Calendar timings varied and did not show an improvement at 10k. Broad searches still count/sort many matches, summary counts scale with library size, and bounded Calendar evaluation allocates substantially; these remain useful optimization targets.
+
 ## Tests
 
 `dotnet test` runs synthetic parser/security tests and real temporary SQLite integration tests, including normalization, nulls, malformed input, ZIP safety, persistence, FTS/date/paging queries, repeated imports, rollback, cancellation, schema checks and interrupted-import recovery. No real personal information is used in fixtures.
 
-The suite also covers export escaping/formula protection, null/time/source/provenance fidelity, all-page streaming, cancellation/output preservation, source/batch/shared-owner deletion, Calendar revision rollback, FTS/FKs, live-WAL snapshots, larger libraries, legacy backup migration, corrupt/unsafe archives, activation fault injection and simulated interrupted-startup recovery. Windows GUI checks in an isolated synthetic library completed JSON export, ZIP backup creation, health verification, restore preview/cancellation and source-removal preview/cancellation. Final destructive GUI confirmations and post-restore GUI reopening were not executed; real service and desktop-command tests cover those operations. Native dialog automation is intermittent. macOS/Linux GUI and actual hardware power-loss recovery remain unverified. See the delivery report for final test totals.
+The suite also covers export escaping/formula protection, null/time/source/provenance fidelity, all-page streaming, cancellation/output preservation, source/batch/shared-owner deletion, Calendar revision rollback, FTS/FKs, live-WAL snapshots, larger libraries, legacy backup migration, corrupt/unsafe archives, activation fault injection and simulated interrupted-startup recovery. Iteration 4 finished with **162 passed, 0 failed, 0 skipped**, and a build with **0 warnings/errors**. Packaging validation exercises script parsing, path boundaries, checksum replacement, payloads, runtime configuration and archive contents for all three runtime identifiers.
+
+Actual Windows checks used published and installed executables with an isolated synthetic library in a path containing spaces and accented characters. The published process loaded its adjacent `coreclr.dll` with `DOTNET_ROOT` pointing to an absent directory; a clean machine without .NET was not available. Checks completed dashboard/version display, native Spotify selection and duplicate reimport, the seven-occurrence mixed timeline, date/text search and event provenance, JSON export with seven records, verified ZIP creation, restore preview/cancellation, healthy SQLite/FTS verification, keyboard focus/shortcuts, maximization and installed-app restart persistence. Native dialog element caching is intermittent; screenshot/keyboard interaction completed those workflows.
+
+The per-user NSIS installer was actually executed, reinstalled and launched. Registration/shortcut/metadata were checked; an attempted reinstall while its app was running returned exit 2 and preserved the executable. Uninstallation removed application files/registration/shortcut while retaining the synthetic library and an unknown synthetic file in the installation directory. Historical cross-version upgrades, a clean Windows VM, exhaustive window/text/DPI combinations, screen readers, macOS/Linux GUI and hardware power-loss recovery remain unverified. Destructive GUI restore/removal confirmations were not executed; real service and desktop-command tests cover those operations.
 
 ## License
 

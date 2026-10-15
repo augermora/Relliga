@@ -107,8 +107,8 @@ public sealed partial class SqliteHistoryStore : ILibraryBackup
                 throw new InvalidDataException("Duplicate manifest fields.");
             manifest = json.RootElement.Deserialize<BackupManifest>(ExportJson) ?? throw new InvalidDataException("Missing backup manifest.");
         }
-        if (manifest.FormatVersion != 1 || manifest.SchemaVersion is < 1 or > 2 || manifest.AppVersion is null ||
-            !Version.TryParse(manifest.AppVersion, out var appVersion) || appVersion.Major > 0 || appVersion.Minor > 3 ||
+        if (manifest.FormatVersion != 1 || manifest.SchemaVersion is < 1 or > CurrentSchemaVersion || manifest.AppVersion is null ||
+            !Version.TryParse(manifest.AppVersion, out var appVersion) || appVersion.Major > 0 || appVersion.Minor > Version.Parse(AppInfo.Version).Minor ||
             manifest.DatabaseBytes is <= 0 or > MaxBackupBytes || manifest.DatabaseSha256?.Length != 64 ||
             !manifest.DatabaseSha256.All(Uri.IsHexDigit) || manifest.Sources is null || manifest.Sources.Length > 10 ||
             manifest.Sources.Any(s => s is not ("Spotify" or "Google Calendar")) || manifest.CreatedAt == default)
@@ -160,7 +160,7 @@ public sealed partial class SqliteHistoryStore : ILibraryBackup
         var calendar = Convert.ToInt64(await ScalarAsync(c, null, "SELECT COUNT(*) FROM calendar_components;", ct));
         var imports = Convert.ToInt64(await ScalarAsync(c, null, "SELECT COUNT(*) FROM import_operations;", ct));
         await c.CloseAsync();
-        return new(1, schema, "0.3.0", DateTimeOffset.UtcNow, await HashFileAsync(path, ct), new FileInfo(path).Length,
+        return new(1, schema, AppInfo.Version, DateTimeOffset.UtcNow, await HashFileAsync(path, ct), new FileInfo(path).Length,
             playback, calendar, imports, sources.ToArray());
     }
 
@@ -224,15 +224,19 @@ public sealed partial class SqliteHistoryStore : ILibraryBackup
         if (new FileInfo(JournalPath).Length > 4096) throw new InvalidDataException("Invalid restore recovery journal. Preserve the library and recovery files for manual recovery.");
         var journal = JsonSerializer.Deserialize<RestoreJournal>(await File.ReadAllTextAsync(JournalPath, ct))
             ?? throw new InvalidDataException("Unreadable restore recovery journal.");
-        if (journal.Version != 1 || journal.PreviousSha256.Length != 64 || journal.CandidateSha256.Length != 64)
+        if (journal.Version != 1 || journal.PreviousSha256 is not { Length: 64 } || journal.CandidateSha256 is not { Length: 64 } ||
+            !journal.PreviousSha256.All(Uri.IsHexDigit) || !journal.CandidateSha256.All(Uri.IsHexDigit))
             throw new InvalidDataException("Unsupported recovery journal. No library files were changed.");
+        var activeHash = File.Exists(DatabasePath) ? await HashFileAsync(DatabasePath, ct) : null;
+        if (activeHash is not null && activeHash != journal.PreviousSha256 && activeHash != journal.CandidateSha256)
+            throw new IOException("Restore recovery found an unexpected active database. Both libraries were preserved. Keep all recovery files for manual inspection.");
         if (File.Exists(RecoveryPath) && await HashFileAsync(RecoveryPath, ct) == journal.PreviousSha256)
         {
             // Candidate never enters WAL before the journal is removed; no uncheckpointed replacement can exist.
             if (File.Exists(DatabasePath)) File.Replace(RecoveryPath, DatabasePath, null);
             else File.Move(RecoveryPath, DatabasePath);
         }
-        else if (!File.Exists(DatabasePath) || await HashFileAsync(DatabasePath, ct) != journal.PreviousSha256)
+        else if (activeHash != journal.PreviousSha256)
             throw new IOException("Automatic restore recovery cannot identify the previous library. Preserve all files; no library was replaced.");
         File.Delete(JournalPath);
     }
@@ -270,7 +274,7 @@ public sealed partial class SqliteHistoryStore : ILibraryBackup
         var entries = Directory.GetFileSystemEntries(path);
         foreach (var entry in entries)
         {
-            if (System.IO.Path.GetFileName(entry) is not ("library.db" or "library.db-wal" or "library.db-shm" or "library.db.lock" or "library.db-journal" or "candidate.db" or "candidate.db-journal") ||
+            if (System.IO.Path.GetFileName(entry) is not ("library.db" or "library.db-wal" or "library.db-shm" or "library.db.lock" or "library.db-journal" or "candidate.db" or "candidate.db-journal" or "candidate.db-wal" or "candidate.db-shm") ||
                 (File.GetAttributes(entry) & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0)
                 throw new IOException("Unexpected staging contents were preserved. Review " + path);
         }

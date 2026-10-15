@@ -65,7 +65,7 @@ public sealed class MigrationTests : IDisposable
         Assert.Equal(2, (await store.QueryAsync(new(From: Calendars.Date(), Until: Calendars.Date(2)))).Total);
         using var check = new SqliteConnection($"Data Source={path};Pooling=False"); await check.OpenAsync();
         using var cmd = check.CreateCommand(); cmd.CommandText = "SELECT COUNT(*) FROM event_origins;"; Assert.Equal(2L, await cmd.ExecuteScalarAsync());
-        cmd.CommandText = "PRAGMA user_version;"; Assert.Equal(2L, await cmd.ExecuteScalarAsync());
+        cmd.CommandText = "PRAGMA user_version;"; Assert.Equal(3L, await cmd.ExecuteScalarAsync());
     }
 
     // Frozen Iteration 1 schema. Keep independent of the current migration implementation.

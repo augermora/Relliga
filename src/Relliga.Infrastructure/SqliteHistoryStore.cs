@@ -11,8 +11,7 @@ public sealed partial class SqliteHistoryStore(string databasePath, ICalendarExp
     private FileStream? ownership;
     private readonly SemaphoreSlim initialization = new(1, 1);
     public string DatabasePath { get; } = Path.GetFullPath(databasePath);
-    public static string DefaultDatabasePath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Relliga", "relliga.db");
+    public static string DefaultDatabasePath => AppDataPaths.ResolveDatabasePath();
 
     private async Task<SqliteConnection> OpenAsync(CancellationToken ct)
     {
@@ -38,11 +37,14 @@ public sealed partial class SqliteHistoryStore(string databasePath, ICalendarExp
                 CleanAbandonedStaging(Path.GetDirectoryName(DatabasePath)!, StagingPrefix);
                 await using var connection = await OpenAsync(ct);
                 var version = Convert.ToInt32(await ScalarAsync(connection, null, "PRAGMA user_version;", ct));
-                if (version > 2) throw new InvalidOperationException("This library was created by a newer Relliga version. Update the application.");
+                if (version > CurrentSchemaVersion) throw new InvalidOperationException("This library was created by a newer Relliga version. Update the application.");
+                if (version == 0 && Convert.ToInt64(await ScalarAsync(connection, null, "SELECT COUNT(*) FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%';", ct)) > 0)
+                    throw new InvalidDataException("This is not an empty or recognized Relliga library. No schema was created or replaced.");
                 await ExecuteAsync(connection, null, "PRAGMA journal_mode=WAL;", ct);
                 using var tx = connection.BeginTransaction();
                 if (version == 0) await ExecuteAsync(connection, tx, SchemaV1, ct);
                 if (version < 2) await MigrateV2Async(connection, tx, ct);
+                if (version < 3) await ExecuteAsync(connection, tx, SchemaV3, ct);
                 await ExecuteAsync(connection, tx,
                     "UPDATE import_operations SET status='Interrupted', message='The previous session ended before this import completed. No partial events were saved.' WHERE status='Running';", ct);
                 tx.Commit();

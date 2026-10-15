@@ -60,4 +60,25 @@ public sealed class OwnershipDesktopTests : IAsyncLifetime
         vm.Confirm = (_, _) => Task.FromResult(true); await vm.ExportDataCommand.ExecuteAsync(null); Assert.Contains("outside the managed", vm.Error);
         Assert.True((await store.VerifyAsync()).Healthy);
     }
+
+    [Fact] public async Task CancellingDestructivePreviewPreservesAppliedFiltersAndSelection()
+    {
+        vm.NavigateCommand.Execute("3"); if (vm.FilterCommand.ExecutionTask is { } loading) await loading;
+        vm.SearchText = "Synthetic"; await vm.FilterCommand.ExecuteAsync(null);
+        vm.SelectedEvent = Assert.Single(vm.Events); var selected = vm.SelectedEvent;
+        vm.NavigateCommand.Execute("5"); vm.Confirm = (_, _) => Task.FromResult(false);
+        await vm.RemoveSourceCommand.ExecuteAsync(null);
+        Assert.Same(selected, vm.SelectedEvent); Assert.Single(vm.Events); Assert.Contains("text: Synthetic", vm.ExportScopeSummary); Assert.True(vm.CanExport);
+        await vm.VerifyLibraryCommand.ExecuteAsync(null);
+        Assert.Same(selected, vm.SelectedEvent); Assert.True(vm.CanExport);
+    }
+
+    [Fact] public void CommandsReflectBusyAndSelectionStates()
+    {
+        Assert.False(vm.CanExport); vm.ExportScope = 1; Assert.True(vm.ExportDataCommand.CanExecute(null));
+        vm.SelectedImport = null; Assert.False(vm.RemoveImportCommand.CanExecute(null));
+        vm.SelectedRemovalSource = null; Assert.False(vm.RemoveSourceCommand.CanExecute(null));
+        vm.IsBusy = true; Assert.False(vm.ExportDataCommand.CanExecute(null)); Assert.False(vm.PickFileCommand.CanExecute(null));
+        vm.IsBusy = false; Assert.True(vm.ExportDataCommand.CanExecute(null));
+    }
 }

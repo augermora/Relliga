@@ -17,6 +17,11 @@ public sealed partial class MainWindow : Window
                 vm.SaveFile = SaveFileAsync;
                 vm.SelectBackup = PickBackupAsync;
                 vm.Confirm = ConfirmAsync;
+                vm.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(MainViewModel.SelectedSection) && vm.IsSearch)
+                        Avalonia.Threading.Dispatcher.UIThread.Post(() => SearchBox.Focus());
+                };
             }
         };
         Closing += async (_, e) =>
@@ -60,8 +65,12 @@ public sealed partial class MainWindow : Window
             Title = title, Width = 620, Height = 440, MinWidth = 420, MinHeight = 300,
             WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = Avalonia.Media.Brush.Parse("#141D2B")
         };
-        var cancel = new Button { Content = "Cancel", IsCancel = true };
-        var confirm = new Button { Content = "Confirm", Classes = { "primary" } };
+        var cancel = new Button { Content = "Cancel", IsCancel = true, IsDefault = true };
+        var action = title.StartsWith("Remove", StringComparison.Ordinal) ? "Remove data" :
+            title.Contains("current library", StringComparison.Ordinal) ? "Replace library" :
+            title.StartsWith("Discard", StringComparison.Ordinal) ? "Discard recovery copy" : "Replace file";
+        var confirm = new Button { Content = action, Classes = { "primary" } };
+        Avalonia.Automation.AutomationProperties.SetHelpText(confirm, "This action requires explicit confirmation. Cancel is the initial keyboard focus.");
         cancel.Click += (_, _) => dialog.Close(false); confirm.Click += (_, _) => dialog.Close(true);
         var layout = new Grid { RowDefinitions = RowDefinitions.Parse("Auto,*,Auto"), Margin = new Avalonia.Thickness(24), RowSpacing = 20 };
         layout.Children.Add(new TextBlock { Text = title, FontSize = 23, FontWeight = Avalonia.Media.FontWeight.SemiBold });

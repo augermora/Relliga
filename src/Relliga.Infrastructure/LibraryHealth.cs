@@ -14,10 +14,10 @@ public sealed partial class SqliteHistoryStore : ILibraryHealth
 
     private static async Task ValidateSchemaAsync(SqliteConnection c, int version, CancellationToken ct)
     {
-        if (version is < 1 or > 2) throw new InvalidDataException($"Unsupported library schema {version}. Supported backup schemas: 1–2.");
+        if (version is < 1 or > CurrentSchemaVersion) throw new InvalidDataException($"Unsupported library schema {version}. Supported backup schemas: 1–{CurrentSchemaVersion}.");
         await using var expected = new SqliteConnection("Data Source=:memory:"); await expected.OpenAsync(ct);
         await ExecuteAsync(expected, null, SchemaV1, ct);
-        if (version == 2) { using var tx = expected.BeginTransaction(); await MigrateV2Async(expected, tx, ct); tx.Commit(); }
+        if (version >= 2) { using var tx = expected.BeginTransaction(); await MigrateV2Async(expected, tx, ct); if (version >= 3) await ExecuteAsync(expected, tx, SchemaV3, ct); tx.Commit(); }
         static async Task<List<string>> ReadSchema(SqliteConnection connection, CancellationToken token)
         {
             var result = new List<string>();
@@ -37,7 +37,7 @@ public sealed partial class SqliteHistoryStore : ILibraryHealth
         var version = Convert.ToInt32(await ScalarAsync(c, null, "PRAGMA user_version;", ct));
         try { await ValidateSchemaAsync(c, version, ct); }
         catch (InvalidDataException ex) { return new([ex.Message]); }
-        if (version != 2) return new(["This library requires migration to schema 2 before use."]);
+        if (version != CurrentSchemaVersion) return new([$"This library requires migration to schema {CurrentSchemaVersion} before use."]);
         using (var cmd = Command(c, null, "PRAGMA integrity_check;"))
         await using (var r = await cmd.ExecuteReaderAsync(ct))
             while (await r.ReadAsync(ct)) if (r.GetString(0) != "ok") problems.Add("SQLite: " + r.GetString(0));

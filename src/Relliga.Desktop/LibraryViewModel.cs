@@ -15,20 +15,30 @@ public partial class MainViewModel
     public string[] ExportScopes { get; } = ["Current applied timeline / search filters", "Spotify · all playback", "Google Calendar · date range", "Both sources · date range"];
     public ObservableCollection<string> AvailableSources { get; } = [];
     private EventQuery? appliedQuery;
-    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ExportScopeSummary), nameof(ExportUsesDates))] private int exportScope;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(ExportScopeSummary), nameof(ExportUsesDates))] [NotifyCanExecuteChangedFor(nameof(ExportDataCommand))] private int exportScope;
     [ObservableProperty] private int exportFormat;
-    [ObservableProperty] private string? selectedRemovalSource;
+    [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(RemoveSourceCommand))] private string? selectedRemovalSource;
     [ObservableProperty] private string healthStatus = "Run verification to check SQLite, provenance and search indexes. Verification makes no repairs.";
     [ObservableProperty] private string ownershipResult = "Export, back up, and manage the information held in this library.";
     public bool ExportUsesDates => ExportScope >= 2;
+    public bool CanExport => CanWork && !IsQuerying && (ExportScope != 0 || appliedQuery is not null);
+    public bool CanRemoveSource => CanWork && SelectedRemovalSource is not null;
+    public bool CanRemoveImport => CanWork && SelectedImport is not null;
+    private int mutationAttempts;
     public string ExportScopeSummary => ExportScope == 0
         ? appliedQuery is null ? "Apply Timeline or Search filters first. Every matching record will be exported."
             : $"All matches · {appliedQuery.Provider ?? "both sources"} · {appliedQuery.Kind ?? "all types"} · text: {appliedQuery.Text ?? "none"} · {appliedQuery.From?.ToString("u") ?? "start"} → {appliedQuery.Until?.ToString("u") ?? "end"} (exclusive)"
         : ExportScope == 1 ? "All Spotify playback, without a date limit. JSON retains all import origins; CSV includes selected provenance and source metadata."
         : "All matching Calendar occurrences / playback in the dates below. Blank dates use Timeline's 90-day Calendar default. Maximum Calendar window: 366 days.";
 
-    partial void OnIsBusyChanged(bool value) => NotifyLibraryCommands();
-    partial void OnIsReadyChanged(bool value) => NotifyLibraryCommands();
+    partial void OnIsBusyChanged(bool value) { OnPropertyChanged(nameof(CanWork)); NotifyLibraryCommands(); }
+    partial void OnIsReadyChanged(bool value) { OnPropertyChanged(nameof(CanWork)); NotifyLibraryCommands(); }
+    private void PrepareLibraryMutation()
+    {
+        mutationAttempts++; appliedQuery = null;
+        HealthStatus = "The library may have changed. Run verification for a current health report.";
+        OnPropertyChanged(nameof(ExportScopeSummary)); ExportDataCommand.NotifyCanExecuteChanged();
+    }
     private void NotifyLibraryCommands()
     {
         ExportDataCommand.NotifyCanExecuteChanged(); CreateBackupCommand.NotifyCanExecuteChanged(); RestoreBackupCommand.NotifyCanExecuteChanged();
@@ -46,11 +56,12 @@ public partial class MainViewModel
         return (path, exists);
     }
 
-    private async Task LibraryWorkAsync(string initial, Func<CancellationToken, IProgress<OperationProgress>, Task<string>> operation, bool invalidatesQueries = false)
+    private async Task LibraryWorkAsync(string initial, Func<CancellationToken, IProgress<OperationProgress>, Task<string>> operation)
     {
         if (!CanWork) return;
         queryCancellation?.Cancel(); IsBusy = true; IsCancellable = true; Error = null;
         workCancellation = new(); Status = initial;
+        var beforeMutation = mutationAttempts;
         try
         {
             var operationCancellation = workCancellation;
@@ -65,22 +76,21 @@ public partial class MainViewModel
         finally
         {
             IsCancellable = false; workCancellation.Dispose(); workCancellation = null;
-            historyPage = 0;
-            try { await RefreshSummaryAsync(); }
-            catch (Exception ex) { Error = (Error is null ? "" : Error + "\n") + "Could not refresh the library: " + ex.Message; }
-            Events.Clear(); SelectedEvent = null;
-            if (invalidatesQueries)
+            var refresh = mutationAttempts != beforeMutation;
+            if (refresh)
             {
-                appliedQuery = null;
-                HealthStatus = "The library may have changed. Run verification for a current health report.";
+                historyPage = 0;
+                try { await RefreshSummaryAsync(); }
+                catch (Exception ex) { Error = (Error is null ? "" : Error + "\n") + "Could not refresh the library: " + ex.Message; }
+                Events.Clear(); SelectedEvent = null;
             }
             OnPropertyChanged(nameof(HasEvents)); OnPropertyChanged(nameof(HasNoEvents)); OnPropertyChanged(nameof(ExportScopeSummary));
             IsBusy = false;
-            if (IsExplorer) await LoadPageAsync();
+            if (refresh && IsExplorer) await LoadPageAsync();
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanWork))]
+    [RelayCommand(CanExecute = nameof(CanExport))]
     private Task ExportDataAsync() => LibraryWorkAsync("Preparing export…", async (ct, progress) =>
     {
         var query = ExportScope switch
@@ -114,21 +124,23 @@ public partial class MainViewModel
         Status = "Validating backup structure, checksums and database…";
         var preview = await Task.Run(() => library.InspectAsync(path, ct));
         if (!await AskAsync("Replace the current library?", preview.Description)) return "Restore cancelled · Current library unchanged";
+        PrepareLibraryMutation();
         await Task.Run(() => library.RestoreAsync(preview, progress, ct));
         return "Library restored and reopened. The previous library is retained in relliga.db.previous.";
-    }, invalidatesQueries: true);
+    });
 
-    [RelayCommand(CanExecute = nameof(CanWork))]
+    [RelayCommand(CanExecute = nameof(CanRemoveSource))]
     private Task RemoveSourceAsync() => RemoveAsync(() => new(Provider: SelectedRemovalSource ?? throw new InvalidOperationException("Select an imported source.")));
-    [RelayCommand(CanExecute = nameof(CanWork))]
+    [RelayCommand(CanExecute = nameof(CanRemoveImport))]
     private Task RemoveImportAsync() => RemoveAsync(() => new(ImportId: SelectedImport?.Record.Id ?? throw new InvalidOperationException("Select a batch in Import history first.")));
     private Task RemoveAsync(Func<DeletionTarget> target) => LibraryWorkAsync("Preparing deletion preview…", async (ct, _) =>
     {
         var preview = await Task.Run(() => library.PreviewDeletionAsync(target(), ct));
         if (!await AskAsync("Remove imported data?", preview.Explanation)) return "Deletion cancelled · Library unchanged";
+        PrepareLibraryMutation();
         await Task.Run(() => library.DeleteAsync(preview, ct));
         return $"Removed {preview.RemovedRecords:N0} stored records; retained {preview.SharedRecords:N0} shared records.";
-    }, invalidatesQueries: true);
+    });
 
     [RelayCommand(CanExecute = nameof(CanWork))]
     private Task VerifyLibraryAsync() => LibraryWorkAsync("Verifying library health…", async (ct, _) =>

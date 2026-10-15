@@ -17,7 +17,9 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
     public ObservableCollection<EventItem> Events { get; } = [];
     public ObservableCollection<ImportItem> RecentImports { get; } = [];
     public string DatabaseLocation => library.DatabasePath;
-    public string Version => "0.3.0";
+    public string Version => AppInfo.Version;
+    public string VersionLabel => $"v{Version} · GPLv3";
+    public string AboutVersion => $"Version {Version} · Open source · GNU GPLv3";
     private CancellationTokenSource? workCancellation;
     private CancellationTokenSource? queryCancellation;
     private int page;
@@ -33,11 +35,12 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
     [NotifyCanExecuteChangedFor(nameof(PickFileCommand), nameof(ImportCommand), nameof(PreviousCommand), nameof(NextCommand), nameof(FilterCommand), nameof(ClearFiltersCommand), nameof(PreviousHistoryCommand), nameof(NextHistoryCommand))]
     private bool isBusy;
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanWork))]
     [NotifyPropertyChangedFor(nameof(NeedsInitialization))]
     [NotifyCanExecuteChangedFor(nameof(PickFileCommand), nameof(ImportCommand), nameof(FilterCommand), nameof(ClearFiltersCommand), nameof(PreviousHistoryCommand), nameof(NextHistoryCommand))]
     private bool isReady;
-    [ObservableProperty] private bool isQuerying;
-    [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(CancelCommand))] private bool isCancellable;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasNoEvents), nameof(CanCancel))] private bool isQuerying;
+    [ObservableProperty] [NotifyPropertyChangedFor(nameof(CanCancel))] [NotifyCanExecuteChangedFor(nameof(CancelCommand))] private bool isCancellable;
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasError))] private string? error;
     [ObservableProperty] private string status = "Opening your local library…";
     [ObservableProperty] private string selectedFile = "No file selected";
@@ -60,7 +63,7 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
     [ObservableProperty] private string pageLabel = "No events";
     [ObservableProperty] private string emptyMessage = "Your story starts with an import. Add a Spotify or Calendar export to see it here.";
     [ObservableProperty] [NotifyPropertyChangedFor(nameof(HasSelection), nameof(SelectedDetails))] private EventItem? selectedEvent;
-    [ObservableProperty] private ImportItem? selectedImport;
+    [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(RemoveImportCommand))] private ImportItem? selectedImport;
 
     public bool IsDashboard => SelectedSection == 0;
     public bool IsImport => SelectedSection == 1;
@@ -77,16 +80,16 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
     public string PageTitle => Sections[Math.Clamp(SelectedSection, 0, Sections.Length - 1)];
     public bool CanWork => IsReady && !IsBusy;
     public bool CanImport => CanWork && ImportPath is not null;
-    public bool CanPrevious => CanWork && page > 0;
-    public bool CanNext => CanWork && (long)(page + 1) * 50 < total;
+    public bool CanPrevious => CanWork && !IsQuerying && page > 0;
+    public bool CanNext => CanWork && !IsQuerying && (long)(page + 1) * 50 < total;
+    public bool CanCancel => IsCancellable || IsQuerying;
     public bool CanPreviousHistory => CanWork && historyPage > 0;
     public bool CanNextHistory => CanWork && (long)(historyPage + 1) * 20 < historyTotal;
 
     partial void OnSelectedSectionChanged(int value)
     {
-        page = 0;
-        SelectedEvent = null;
-        if (IsReady && IsExplorer) FilterCommand.Execute(null);
+        if (IsExplorer) { page = 0; SelectedEvent = null; }
+        if (CanWork && IsExplorer) FilterCommand.Execute(null);
     }
 
     [RelayCommand]
@@ -195,10 +198,11 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
         }
     }
 
-    [RelayCommand(CanExecute = nameof(IsCancellable))]
+    [RelayCommand(CanExecute = nameof(CanCancel))]
     public void Cancel()
     {
-        if (workCancellation is null) return;
+        queryCancellation?.Cancel();
+        if (workCancellation is null) { if (IsQuerying) Status = "Query cancelled"; return; }
         workCancellation.Cancel(); IsCancellable = false; Status = "Cancelling safely…";
     }
 
@@ -229,6 +233,7 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
             var result = await Task.Run(() => store.QueryAsync(query, cancellation.Token));
             if (cancellation.IsCancellationRequested) return;
             appliedQuery = query with { Page = 0, From = result.WindowFrom ?? query.From, Until = result.WindowUntil ?? query.Until };
+            ExportDataCommand.NotifyCanExecuteChanged();
             OnPropertyChanged(nameof(ExportScopeSummary));
             total = result.Total;
             Events.Clear();
@@ -255,7 +260,14 @@ public partial class MainViewModel(IHistoryStore store, ImportService imports, I
         }
     }
     public bool HasEvents => Events.Count > 0;
-    public bool HasNoEvents => !HasEvents;
+    public bool HasNoEvents => !HasEvents && !IsQuerying;
+    partial void OnIsQueryingChanged(bool value)
+    { CancelCommand.NotifyCanExecuteChanged(); PreviousCommand.NotifyCanExecuteChanged(); NextCommand.NotifyCanExecuteChanged(); ExportDataCommand.NotifyCanExecuteChanged(); }
+
+    [RelayCommand] private void Navigate(string section)
+    {
+        if (int.TryParse(section, out var index) && index >= 0 && index < Sections.Length) SelectedSection = index;
+    }
 
     private async Task RefreshSummaryAsync()
     {

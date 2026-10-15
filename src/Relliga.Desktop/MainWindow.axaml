@@ -1,8 +1,21 @@
 <Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:Relliga.Desktop" xmlns:d="using:Relliga.Domain"
         x:Class="Relliga.Desktop.MainWindow" x:DataType="local:MainViewModel"
-        Title="Relliga — Your digital life, together." Width="1240" Height="820" MinWidth="900" MinHeight="650"
+        Title="Relliga — Your digital life, together." Icon="/Assets/Relliga.ico" Width="1240" Height="820" MinWidth="900" MinHeight="650"
         Background="#101622" WindowStartupLocation="CenterScreen">
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Alt+D1" Command="{Binding NavigateCommand}" CommandParameter="0" />
+    <KeyBinding Gesture="Alt+D2" Command="{Binding NavigateCommand}" CommandParameter="1" />
+    <KeyBinding Gesture="Alt+D3" Command="{Binding NavigateCommand}" CommandParameter="2" />
+    <KeyBinding Gesture="Alt+D4" Command="{Binding NavigateCommand}" CommandParameter="3" />
+    <KeyBinding Gesture="Alt+D5" Command="{Binding NavigateCommand}" CommandParameter="4" />
+    <KeyBinding Gesture="Alt+D6" Command="{Binding NavigateCommand}" CommandParameter="5" />
+    <KeyBinding Gesture="Alt+D7" Command="{Binding NavigateCommand}" CommandParameter="6" />
+    <KeyBinding Gesture="Ctrl+F" Command="{Binding NavigateCommand}" CommandParameter="3" />
+    <KeyBinding Gesture="Ctrl+I" Command="{Binding ShowImportCommand}" />
+    <KeyBinding Gesture="Ctrl+E" Command="{Binding NavigateCommand}" CommandParameter="5" />
+    <KeyBinding Gesture="Escape" Command="{Binding CancelCommand}" />
+  </Window.KeyBindings>
   <Grid ColumnDefinitions="210,*">
     <Border Background="#0C111C" BorderBrush="#263045" BorderThickness="0,0,1,0" Padding="20,32,16,20">
       <Grid RowDefinitions="Auto,Auto,*,Auto">
@@ -14,11 +27,11 @@
           <TextBlock Text="Your digital life,&#10;together." Classes="muted" FontSize="12" LineHeight="19" />
         </StackPanel>
         <TextBlock Grid.Row="1" Text="YOUR LIBRARY" Classes="eyebrow" Margin="12,0,0,12" />
-        <ListBox Grid.Row="2" ItemsSource="{Binding Sections}" SelectedIndex="{Binding SelectedSection}" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Main navigation" />
+        <ListBox Grid.Row="2" ItemsSource="{Binding Sections}" SelectedIndex="{Binding SelectedSection}" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Main navigation" AutomationProperties.HelpText="Use arrow keys to choose a section, or Alt plus 1 through 7." KeyboardNavigation.TabNavigation="Once" />
         <StackPanel Grid.Row="3" Margin="8,16,0,0" Spacing="7">
           <TextBlock Text="●  Local &amp; private" Foreground="#9ADBC4" FontSize="12" />
           <TextBlock Text="No accounts. No cloud." Classes="muted" FontSize="11" />
-          <TextBlock Text="v0.3.0 · GPLv3" Classes="muted" FontSize="11" />
+          <TextBlock Text="{Binding VersionLabel}" Classes="muted" FontSize="11" />
         </StackPanel>
       </Grid>
     </Border>
@@ -28,7 +41,7 @@
         <Button Grid.Column="1" Content="Import personal data" Classes="primary" Command="{Binding ShowImportCommand}" VerticalAlignment="Center" />
       </Grid>
       <Border Grid.Row="1" Background="#38272E" BorderBrush="#B67787" BorderThickness="1" CornerRadius="10" Padding="16" Margin="0,0,0,16" IsVisible="{Binding HasError}">
-        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding Error}" TextWrapping="Wrap" Foreground="#FFDAE0" /><Button Grid.Column="1" Content="Dismiss" Command="{Binding DismissErrorCommand}" Margin="16,0,0,0" VerticalAlignment="Top" /></Grid>
+        <Grid ColumnDefinitions="*,Auto"><ScrollViewer MaxHeight="130" HorizontalScrollBarVisibility="Disabled"><SelectableTextBlock Text="{Binding Error}" TextWrapping="Wrap" Foreground="#FFDAE0" AutomationProperties.Name="Library error" AutomationProperties.LiveSetting="Assertive" /></ScrollViewer><Button Grid.Column="1" Content="Dismiss" Command="{Binding DismissErrorCommand}" Margin="16,0,0,0" VerticalAlignment="Top" /></Grid>
       </Border>
       <Grid Grid.Row="2">
         <ScrollViewer IsVisible="{Binding IsDashboard}" HorizontalScrollBarVisibility="Disabled">
@@ -81,7 +94,7 @@
         <Grid IsVisible="{Binding IsExplorer}" RowDefinitions="Auto,Auto,*,Auto">
           <StackPanel Spacing="12" Margin="0,0,0,16">
             <TextBlock Text="Music and Calendar, one moment at a time." Classes="muted" IsVisible="{Binding IsTimeline}" />
-            <TextBox Text="{Binding SearchText}" PlaceholderText="Search music, calendar titles, descriptions, locations…" IsVisible="{Binding IsSearch}" AutomationProperties.Name="Search text" MaxLength="500">
+            <TextBox x:Name="SearchBox" Text="{Binding SearchText}" PlaceholderText="Search music, calendar titles, descriptions, locations…" IsVisible="{Binding IsSearch}" AutomationProperties.Name="Search text" AutomationProperties.HelpText="Word prefixes are combined with AND. Press Enter to apply." MaxLength="500">
               <TextBox.KeyBindings><KeyBinding Gesture="Enter" Command="{Binding FilterCommand}" /></TextBox.KeyBindings>
             </TextBox>
             <Grid ColumnDefinitions="*,12,*">
@@ -131,8 +144,8 @@
             <Border Classes="card"><StackPanel Spacing="14">
               <TextBlock Text="Take your history with you." FontSize="24" FontWeight="SemiBold" />
               <TextBlock Text="Export every matching record, including results beyond the current page. JSON preserves missing values, source metadata, Calendar definitions and all import origins. CSV is suitable for spreadsheets and protects formula-like text." Classes="muted" TextWrapping="Wrap" LineHeight="24" />
-              <TextBlock Text="FORMAT" Classes="eyebrow" /><ComboBox ItemsSource="{Binding ExportFormats}" SelectedIndex="{Binding ExportFormat}" HorizontalAlignment="Stretch" AutomationProperties.Name="Export format" />
-              <TextBlock Text="SCOPE" Classes="eyebrow" /><ComboBox ItemsSource="{Binding ExportScopes}" SelectedIndex="{Binding ExportScope}" HorizontalAlignment="Stretch" AutomationProperties.Name="Export scope" />
+              <TextBlock Text="FORMAT" Classes="eyebrow" /><ComboBox ItemsSource="{Binding ExportFormats}" SelectedIndex="{Binding ExportFormat}" IsEnabled="{Binding CanWork}" HorizontalAlignment="Stretch" AutomationProperties.Name="Export format" />
+              <TextBlock Text="SCOPE" Classes="eyebrow" /><ComboBox ItemsSource="{Binding ExportScopes}" SelectedIndex="{Binding ExportScope}" IsEnabled="{Binding CanWork}" HorizontalAlignment="Stretch" AutomationProperties.Name="Export scope" />
               <TextBlock Text="{Binding ExportScopeSummary}" Classes="muted" TextWrapping="Wrap" LineHeight="23" />
               <Grid ColumnDefinitions="*,12,*" IsEnabled="{Binding ExportUsesDates}"><TextBox Text="{Binding FromDate}" PlaceholderText="From YYYY-MM-DD" AutomationProperties.Name="Export from date" /><TextBox Grid.Column="2" Text="{Binding ToDate}" PlaceholderText="Through YYYY-MM-DD" AutomationProperties.Name="Export through date" /></Grid>
               <Button Content="Choose destination &amp; export…" Classes="primary" Command="{Binding ExportDataCommand}" HorizontalAlignment="Left" />
@@ -141,7 +154,7 @@
             <Border Classes="card"><StackPanel Spacing="14">
               <TextBlock Text="Manage imported sources" FontSize="20" FontWeight="SemiBold" />
               <TextBlock Text="{Binding SourceStatistics}" Classes="muted" TextWrapping="Wrap" LineHeight="24" />
-              <ComboBox ItemsSource="{Binding AvailableSources}" SelectedItem="{Binding SelectedRemovalSource}" HorizontalAlignment="Stretch" PlaceholderText="Select an imported source" AutomationProperties.Name="Source to remove" />
+              <ComboBox ItemsSource="{Binding AvailableSources}" SelectedItem="{Binding SelectedRemovalSource}" IsEnabled="{Binding CanWork}" HorizontalAlignment="Stretch" PlaceholderText="Select an imported source" AutomationProperties.Name="Source to remove" />
               <Button Content="Review source removal…" Command="{Binding RemoveSourceCommand}" HorizontalAlignment="Left" />
               <TextBlock Text="Review exact stored-record counts before confirming. Remove a specific batch in Import history. Shared records survive; Calendar revisions are recalculated. External originals are untouched. Deletion is logical and does not erase external backups or the previous restore recovery copy." Classes="muted" TextWrapping="Wrap" LineHeight="23" />
             </StackPanel></Border>
@@ -151,7 +164,7 @@
 
         <ScrollViewer IsVisible="{Binding IsAbout}" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Spacing="20">
-            <Border Classes="card"><StackPanel Spacing="16"><TextBlock Text="Relliga" FontSize="32" FontWeight="SemiBold" /><TextBlock Text="Your digital life, together." FontSize="18" Classes="muted" /><TextBlock Text="Version 0.3.0 · Open source · GNU GPLv3" /><TextBlock Text="Preserve, explore, export and manage your personal digital history. Spotify and Google Calendar stay together in a searchable local library." Classes="muted" TextWrapping="Wrap" LineHeight="24" /></StackPanel></Border>
+            <Border Classes="card"><StackPanel Spacing="16"><TextBlock Text="Relliga" FontSize="32" FontWeight="SemiBold" /><TextBlock Text="Your digital life, together." FontSize="18" Classes="muted" /><TextBlock Text="{Binding AboutVersion}" /><TextBlock Text="Preserve, explore, export and manage your personal digital history. Spotify and Google Calendar stay together in a searchable local library." Classes="muted" TextWrapping="Wrap" LineHeight="24" /></StackPanel></Border>
             <Border Classes="card"><StackPanel Spacing="14">
               <TextBlock Text="Backup &amp; restore" FontSize="20" FontWeight="SemiBold" />
               <TextBlock Text="Create a verified portable ZIP with a consistent SQLite snapshot and SHA-256 checksum. Backups contain sensitive, unencrypted personal information. Store them securely. Original export files are not included." Classes="muted" TextWrapping="Wrap" LineHeight="24" />
@@ -166,7 +179,12 @@
           </StackPanel>
         </ScrollViewer>
       </Grid>
-      <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto" Margin="0,18,0,0"><TextBlock Text="{Binding Status}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" /><Button Grid.Column="1" Content="Cancel operation" Command="{Binding CancelCommand}" IsVisible="{Binding IsCancellable}" /><Button Grid.Column="2" Content="Retry opening library" Command="{Binding InitializeCommand}" IsVisible="{Binding NeedsInitialization}" /></Grid>
+      <Grid Grid.Row="3" RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto,Auto" Margin="0,18,0,0">
+        <ProgressBar Grid.ColumnSpan="3" IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="2" Margin="0,0,0,8" AutomationProperties.Name="Library operation in progress" />
+        <TextBlock Grid.Row="1" Text="{Binding Status}" Classes="muted" FontSize="12" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Status}" AutomationProperties.Name="Library status" AutomationProperties.LiveSetting="Polite" VerticalAlignment="Center" />
+        <Button Grid.Row="1" Grid.Column="1" Content="Cancel operation" Command="{Binding CancelCommand}" IsVisible="{Binding CanCancel}" Margin="12,0,0,0" />
+        <Button Grid.Row="1" Grid.Column="2" Content="Retry opening library" Command="{Binding InitializeCommand}" IsVisible="{Binding NeedsInitialization}" />
+      </Grid>
     </Grid>
   </Grid>
 </Window>

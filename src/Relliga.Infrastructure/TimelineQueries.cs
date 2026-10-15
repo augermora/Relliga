@@ -39,26 +39,22 @@ public sealed partial class SqliteHistoryStore
             CREATE INDEX temp.ix_occurrences_sort ON occurrences(sort_key DESC,component_id DESC,occurrence_key);
             """, ct);
         if (hasCalendars) await PopulateOccurrencesAsync(c, tx, from!.Value, until!.Value, text, ct);
-        var where = "WHERE ($from IS NULL OR e.ended_at >= $from) AND ($until IS NULL OR e.ended_at < $until) " +
-            "AND ($provider IS NULL OR e.provider=$provider) AND ($kind IS NULL OR e.kind=$kind)";
-        if (text is not null) where += " AND e.id IN (SELECT rowid FROM events_fts WHERE events_fts MATCH $text)";
-        var parameters = new List<(string, object?)>
-        {
-            ("$from", from is { } f ? Stamp(f) : null), ("$until", until is { } u ? Stamp(u) : null),
-            ("$provider", query.Provider), ("$kind", query.Kind)
-        };
-        if (text is not null) parameters.Add(("$text", text));
-        var count = Convert.ToInt64(await ScalarAsync(c, tx, "SELECT COUNT(*) FROM events e " + where, ct, parameters.ToArray())) +
-            Convert.ToInt64(await ScalarAsync(c, tx, "SELECT COUNT(*) FROM occurrences;", ct));
+        var (where, parameters) = PlaybackFilter(query with { From = from, Until = until }, text);
+        var playbackFrom = PlaybackFrom(text);
+        var playbackCount = Convert.ToInt64(await ScalarAsync(c, tx, "SELECT COUNT(*) FROM " + playbackFrom + " " + where, ct, parameters.ToArray()));
+        var occurrenceCount = Convert.ToInt64(await ScalarAsync(c, tx, "SELECT COUNT(*) FROM occurrences;", ct));
+        var count = playbackCount + occurrenceCount;
         parameters.Add(("$limit", sink is null ? query.PageSize : -1)); parameters.Add(("$offset", sink is null ? (long)query.Page * query.PageSize : 0));
         var references = new List<(long Id, bool Calendar, string? Payload)>();
-        using (var cmd = Command(c, tx, """
+        var sql = occurrenceCount == 0 ? "SELECT e.id,0,NULL FROM " + playbackFrom + " " + where + " ORDER BY e.ended_at DESC,e.id DESC LIMIT $limit OFFSET $offset;" :
+            playbackCount == 0 ? "SELECT component_id,1,payload FROM occurrences ORDER BY sort_key DESC,component_id DESC,occurrence_key LIMIT $limit OFFSET $offset;" : """
             WITH timeline AS (
-              SELECT e.id,0 AS calendar,e.ended_at AS sort_key,'' AS occurrence_key,NULL AS payload FROM events e
-            """ + " " + where + """
+              SELECT e.id,0 AS calendar,e.ended_at AS sort_key,'' AS occurrence_key,NULL AS payload FROM
+            """ + " " + playbackFrom + " " + where + """
               UNION ALL SELECT component_id,1,sort_key,occurrence_key,payload FROM occurrences)
             SELECT id,calendar,payload FROM timeline ORDER BY sort_key DESC,calendar DESC,id DESC,occurrence_key LIMIT $limit OFFSET $offset;
-            """, parameters.ToArray()))
+            """;
+        using (var cmd = Command(c, tx, sql, parameters.ToArray()))
         await using (var r = await cmd.ExecuteReaderAsync(ct))
             while (await r.ReadAsync(ct))
             {
@@ -73,6 +69,22 @@ public sealed partial class SqliteHistoryStore
                 reference.Payload is null ? null : JsonSerializer.Deserialize<CalendarOccurrence>(reference.Payload), ct));
         tx.Commit();
         return new(items, count, hasCalendars ? from : null, hasCalendars ? until : null);
+    }
+
+    // FTS supplies rowids. Avoid the provider/date index turning selective text searches into a provider-wide scan.
+    internal static string PlaybackFrom(string? text) => text is null ? "events e" : "events e NOT INDEXED";
+
+    internal static (string Sql, List<(string, object?)> Parameters) PlaybackFilter(EventQuery query, string? text)
+    {
+        var clauses = new List<string>(); var parameters = new List<(string, object?)>();
+        void Add(string expression, string name, object? value)
+        { if (value is not null) { clauses.Add(expression); parameters.Add((name, value)); } }
+        Add("e.ended_at >= $from", "$from", query.From is { } from ? Stamp(from) : null);
+        Add("e.ended_at < $until", "$until", query.Until is { } until ? Stamp(until) : null);
+        Add("e.provider=$provider", "$provider", query.Provider);
+        Add("e.kind=$kind", "$kind", query.Kind);
+        Add("e.id IN (SELECT rowid FROM events_fts WHERE events_fts MATCH $text)", "$text", text);
+        return (clauses.Count == 0 ? "" : "WHERE " + string.Join(" AND ", clauses), parameters);
     }
 
     private async Task PopulateOccurrencesAsync(SqliteConnection c, SqliteTransaction tx, DateTimeOffset from,

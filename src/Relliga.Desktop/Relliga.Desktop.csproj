@@ -1,10 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <AssemblyName>Relliga</AssemblyName>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/Relliga.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <AvaloniaResource Include="Assets/Relliga.ico" />
+    <None Update="Assets/Relliga.ico" Link="Relliga.ico" CopyToPublishDirectory="PreserveNewest" />
     <ProjectReference Include="../Relliga.Infrastructure/Relliga.Infrastructure.csproj" />
     <ProjectReference Include="../Relliga.Importers/Relliga.Importers.csproj" />
     <PackageReference Include="Avalonia" Version="12.1.4" />
@@ -13,5 +17,10 @@
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.4" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.13" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../packaging/THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../packaging/windows/NSIS-COPYING.txt" Link="licenses/NSIS/COPYING.txt" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -15,3 +15,5 @@
 - Use synthetic fixtures only. Test parser failures, security limits, persistence, rollback, cancellation, search and deduplication when changing those behaviors.
 - Before delivery run `dotnet restore`, `dotnet build`, and `dotnet test`. The repository opts into Microsoft Testing Platform in global.json. For a named solution use `dotnet test --solution Relliga.slnx`. Report unverified GUI or platform behavior honestly.
 - Preserve LICENSE and Git configuration. Do not commit, push, publish, or modify GitHub settings without user approval.
+- Keep version/publisher metadata consistent through Directory.Build.props and AppInfo. Publish self-contained, untrimmed, non-AOT, multi-file artifacts; include dependency/native/font notices. Packaging output stays under ignored artifacts; per-user installation/uninstallation must never touch personal libraries.
+- Measure deterministic synthetic workloads before optimizing. Preserve query ordering and FTS rowid access; keep provenance indexes and historical-schema backup tests. Benchmark execution is opt-in through the existing test executable, not part of normal test runs.

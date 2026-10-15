@@ -4,9 +4,18 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <Authors>Relliga contributors</Authors>
+    <Company>Relliga contributors</Company>
+    <Product>Relliga</Product>
+    <Title>Relliga</Title>
+    <Description>Your digital life, together. A private, local-first personal history library.</Description>
+    <Copyright>Relliga contributors. Licensed under GNU GPLv3.</Copyright>
+    <RepositoryUrl>https://github.com/augermora/Relliga</RepositoryUrl>
     <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
     <Deterministic>true</Deterministic>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishAot>false</PublishAot>
+    <PublishSingleFile>false</PublishSingleFile>
   </PropertyGroup>
 </Project>

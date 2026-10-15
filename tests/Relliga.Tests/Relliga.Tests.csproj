@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>Exe</OutputType><IsTestProject>true</IsTestProject><IsPackable>false</IsPackable></PropertyGroup>
+  <PropertyGroup><OutputType>Exe</OutputType><IsTestProject>true</IsTestProject><IsPackable>false</IsPackable><StartupObject>Relliga.Tests.Program</StartupObject></PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Relliga.Infrastructure/Relliga.Infrastructure.csproj" />
     <ProjectReference Include="../../src/Relliga.Importers/Relliga.Importers.csproj" />

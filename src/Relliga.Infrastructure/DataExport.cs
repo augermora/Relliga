@@ -22,7 +22,7 @@ public sealed partial class SqliteHistoryStore : IDataExportService
                 {
                     using var writer = new Utf8JsonWriter(stream);
                     writer.WriteStartObject(); writer.WriteNumber("schemaVersion", 1);
-                    writer.WriteString("applicationVersion", "0.3.0");
+                    writer.WriteString("applicationVersion", AppInfo.Version);
                     await StreamAsync(request.Query, async (row, connection, transaction) =>
                     {
                         ct.ThrowIfCancellationRequested();
